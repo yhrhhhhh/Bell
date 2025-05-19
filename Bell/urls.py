@@ -17,13 +17,24 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.static import serve
+from rest_framework.routers import DefaultRouter
+from device.views import DeviceViewSet
+from control.views import ControlCommandViewSet
 
 from bell import settings
 
+# 创建路由器
+router = DefaultRouter()
+router.register(r'devices', DeviceViewSet)
+router.register(r'control', ControlCommandViewSet)
+
 urlpatterns = [
-    # path('admin/', admin.site.urls),
+    path('admin/', admin.site.urls),
     path('user/', include('user.urls')),  # 用户模块
     path('menu/', include('menu.urls')),  # 权限模块
+    path('api/', include(router.urls)),  # API 路由
+    path('api/device/', include('device.urls')),
+    path('api/control/', include('control.urls')),
     # 配置媒体文件的路由地址
     re_path('media/(?P<path>.*)', serve, {'document_root': settings.MEDIA_ROOT}, name='media')
 ]
