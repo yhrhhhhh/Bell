@@ -29,6 +29,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -38,8 +39,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_jwt',
     'user.apps.UserConfig',
-    'role.apps.RoleConfig',
-    'menu.apps.MenuConfig'
+    'menu.apps.MenuConfig',
+    'device.apps.DeviceConfig',
+    'control.apps.ControlConfig'
 ]
 
 MIDDLEWARE = [
@@ -141,3 +143,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = 'media/'
+
+# MQTT Configuration
+MQTT_BROKER_HOST = 'localhost'  # MQTT 代理服务器地址
+MQTT_BROKER_PORT = 1883        # MQTT 代理服务器端口
+MQTT_USERNAME = None           # MQTT 用户名（如果需要）
+MQTT_PASSWORD = None           # MQTT 密码（如果需要）
