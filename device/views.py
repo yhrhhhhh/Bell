@@ -2,6 +2,7 @@ from django.shortcuts import render
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
+from django.db import transaction  # 添加事务导入
 from .models import Device, DeviceStatus, Building, Floor
 from .serializers import DeviceSerializer, DeviceStatusSerializer, DeviceCreateSerializer, DeviceUpdateSerializer, BuildingTreeSerializer
 
@@ -139,6 +140,140 @@ class DeviceViewSet(viewsets.ModelViewSet):
             rooms[room_key]['children'].append(device_data)
         
         return Response(result)
+
+    @action(detail=False, methods=['post'], url_path='batch-delete', url_name='batch_delete')
+    def batch_delete(self, request):
+        """批量删除设备"""
+        device_ids = request.data.get('device_ids', [])
+        if not device_ids:
+            return Response({"error": "没有提供要删除的设备ID"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            devices = Device.objects.filter(id__in=device_ids)
+            deleted_count = devices.count()
+            devices.delete()
+            return Response({
+                "message": f"成功删除{deleted_count}个设备",
+                "deleted_count": deleted_count
+            })
+        except Exception as e:
+            return Response({"error": f"删除失败：{str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'], url_path='batch-control', url_name='batch_control')
+    def batch_control(self, request):
+        """批量控制设备"""
+        print("\n=== 批量控制请求开始 ===")
+        print("请求数据:", request.data)
+        
+        device_ids = request.data.get('device_ids', [])
+        control_data = request.data.get('control', {})
+        
+        print("设备IDs:", device_ids)
+        print("控制数据:", control_data)
+        
+        if not device_ids:
+            return Response({"error": "没有提供要控制的设备ID"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not control_data:
+            return Response({"error": "没有提供控制参数"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        results = {
+            'success': [],
+            'failed': [],
+            'details': {}
+        }
+        
+        try:
+            with transaction.atomic():  # 添加事务支持
+                # 首先刷新获取最新的设备数据
+                devices = Device.objects.filter(id__in=device_ids).select_for_update()
+                print(f"\n找到{devices.count()}个设备")
+                updated_count = 0
+                
+                for device in devices:
+                    try:
+                        print(f"\n正在更新设备: {device.name} (ID: {device.id})")
+                        
+                        # 计算需要更新的字段
+                        updates_needed = {}
+                        
+                        # 检查运行状态是否需要更新
+                        if 'running' in control_data:
+                            new_status = 'running' if control_data['running'] else 'stopped'
+                            if new_status != device.status:
+                                updates_needed['status'] = new_status
+                        
+                        # 检查温度是否需要更新
+                        if 'temp' in control_data:
+                            new_temp = float(control_data['temp'])
+                            if abs(new_temp - device.set_temp) > 0.01:  # 使用小数点比较
+                                updates_needed['temp'] = new_temp
+                        
+                        # 检查模式是否需要更新
+                        if 'mode' in control_data:
+                            new_mode = control_data['mode']
+                            if new_mode != device.mode:
+                                updates_needed['mode'] = new_mode
+                        
+                        print("需要更新的字段:", updates_needed)
+                        
+                        # 只有在有需要更新的字段时才进行更新
+                        if updates_needed:
+                            print("执行更新操作...")
+                            # 更新设备状态
+                            if 'status' in updates_needed:
+                                device.status = updates_needed['status']
+                            if 'temp' in updates_needed:
+                                device.set_temp = updates_needed['temp']
+                            if 'mode' in updates_needed:
+                                device.mode = updates_needed['mode']
+                            
+                            device.save()
+                            print("设备保存成功")
+                            
+                            # 创建状态历史记录
+                            DeviceStatus.objects.create(
+                                device=device,
+                                current_temp=device.current_temp,
+                                set_temp=device.set_temp,
+                                status=device.status,
+                                mode=device.mode,
+                                change_type='batch'  # 添加更改类型
+                            )
+                            print("状态历史记录创建成功")
+                            
+                            updated_count += 1
+                            results['success'].append(device.id)
+                        else:
+                            print("没有需要更新的字段，跳过更新")
+                            results['details'][device.id] = "无需更新"
+                            
+                    except Exception as e:
+                        print(f"更新设备 {device.id} 失败: {str(e)}")
+                        results['failed'].append(device.id)
+                        results['details'][device.id] = str(e)
+                
+                # 重新获取设备列表并序列化
+                updated_devices = Device.objects.filter(id__in=device_ids)
+                print("\n最终的设备状态:")
+                for device in updated_devices:
+                    print(f"设备 {device.name}: 状态={device.status}, 温度={device.set_temp}, 模式={device.mode}")
+                
+                serializer = DeviceSerializer(updated_devices, many=True)
+                
+                print("\n=== 批量控制请求完成 ===")
+                return Response({
+                    "message": f"成功更新{len(results['success'])}个设备，失败{len(results['failed'])}个设备",
+                    "results": results,
+                    "devices": serializer.data
+                })
+                
+        except Exception as e:
+            print(f"\n批量控制失败: {str(e)}")
+            return Response({
+                "error": f"控制失败：{str(e)}",
+                "results": results
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class BuildingViewSet(viewsets.ModelViewSet):
     """建筑视图集"""
