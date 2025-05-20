@@ -9,7 +9,7 @@ class SysUser(models.Model):
     id = models.AutoField(primary_key=True)
     username = models.CharField(max_length=100, unique=True, verbose_name="用户名")
     password = models.CharField(max_length=100, verbose_name="密码")
-    avatar = models.ImageField(upload_to='avatar/%Y/%m', null=True, blank=True, verbose_name="用户头像")
+    avatar = models.ImageField(upload_to='userAvatar', null=True, blank=True, verbose_name="用户头像")
     email = models.EmailField(max_length=100, null=True, blank=True, verbose_name="用户邮箱")
     phonenumber = models.CharField(max_length=11, null=True, blank=True, verbose_name="手机号码")
     login_date = models.DateTimeField(null=True, blank=True, verbose_name="最后登录时间")
@@ -30,6 +30,10 @@ class SysUser(models.Model):
 
 class SysUserSerializer(serializers.ModelSerializer):
     """用户序列化器"""
+    login_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", required=False)
+    create_time = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", required=False)
+    update_time = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", required=False)
+
     class Meta:
         model = SysUser
         fields = '__all__'
