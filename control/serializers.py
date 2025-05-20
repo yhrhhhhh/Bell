@@ -12,7 +12,7 @@ class ControlCommandSerializer(serializers.ModelSerializer):
 class ControlCommandCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ControlCommand
-        fields = ['device', 'command_type', 'parameters', 'priority']
+        fields = ['device', 'command_type', 'command_value']
         
 class BatchCommandSerializer(serializers.ModelSerializer):
     devices_count = serializers.SerializerMethodField()

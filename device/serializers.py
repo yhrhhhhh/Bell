@@ -18,9 +18,26 @@ class DeviceCreateSerializer(serializers.ModelSerializer):
                  'floor_id', 'building_id', 'set_temp', 'mode']
 
 class DeviceUpdateSerializer(serializers.ModelSerializer):
+    """用于更新设备的序列化器"""
     class Meta:
         model = Device
-        fields = ['name', 'location', 'set_temp', 'is_auto']
+        fields = ['name', 'device_id', 'location', 'set_temp', 'mode', 'status']
+        
+    def update(self, instance, validated_data):
+        
+        # 更新字段
+        instance.name = validated_data.get('name', instance.name)
+        instance.device_id = validated_data.get('device_id', instance.device_id)
+        instance.location = validated_data.get('location', instance.location)
+        instance.set_temp = validated_data.get('set_temp', instance.set_temp)
+        instance.mode = validated_data.get('mode', instance.mode)
+        instance.status = validated_data.get('status', instance.status)
+        
+        try:
+            instance.save()
+            return instance
+        except Exception as e:
+            raise
 
 class FloorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -50,13 +67,10 @@ class BuildingTreeSerializer(serializers.ModelSerializer):
     
     def get_children(self, obj):
         """获取楼层作为子节点"""
-        print(f"正在获取建筑 {obj.name} 的楼层...")
         floors = obj.floors.all().order_by('floor_number')
-        print(f"查询到 {floors.count()} 个楼层")
         result = []
         
         for floor in floors:
-            print(f"处理楼层: {floor.name}")
             floor_data = {
                 'id': floor.id,
                 'label': floor.name,
@@ -65,6 +79,5 @@ class BuildingTreeSerializer(serializers.ModelSerializer):
                 'building_id': obj.id
             }
             result.append(floor_data)
-        
-        print(f"楼层数据: {result}")
+
         return result

@@ -275,6 +275,49 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 "results": results
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def update(self, request, *args, **kwargs):
+        print("\n=== 设备更新请求开始 ===")
+        print("请求数据:", request.data)
+        print("设备ID:", kwargs.get('pk'))
+        
+        try:
+            instance = self.get_object()
+            print("当前设备信息:", {
+                'id': instance.id,
+                'name': instance.name,
+                'device_id': instance.device_id,
+                'floor_id': instance.floor.id if instance.floor else None,
+                'set_temp': instance.set_temp,
+                'mode': instance.mode,
+                'status': instance.status
+            })
+            
+            serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
+            print("序列化器:", serializer.__class__.__name__)
+            
+            if serializer.is_valid():
+                print("验证通过的数据:", serializer.validated_data)
+                self.perform_update(serializer)
+                print("更新后的设备信息:", {
+                    'id': instance.id,
+                    'name': instance.name,
+                    'device_id': instance.device_id,
+                    'floor_id': instance.floor.id if instance.floor else None,
+                    'set_temp': instance.set_temp,
+                    'mode': instance.mode,
+                    'status': instance.status
+                })
+                return Response(serializer.data)
+            else:
+                print("验证错误:", serializer.errors)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            print("更新过程中出现错误:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        finally:
+            print("=== 设备更新请求结束 ===\n")
+
 class BuildingViewSet(viewsets.ModelViewSet):
     """建筑视图集"""
     queryset = Building.objects.all()

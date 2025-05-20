@@ -78,12 +78,12 @@ class MQTTClient:
         """发布回调函数"""
         logger.info(f"Message {mid} published successfully")
     
-    def publish_command(self, device_id, command_type, parameters):
+    def publish_command(self, device_id, command_type, command_value):
         """发布控制命令到 MQTT"""
         topic = f"device/{device_id}/command"
         payload = {
             "command_type": command_type,
-            "parameters": parameters,
+            "command_value": command_value,
             "timestamp": datetime.datetime.now().isoformat()
         }
         
