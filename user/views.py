@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from django.utils import timezone
 
 from django.core.paginator import Paginator
 from django.http import JsonResponse
@@ -39,6 +40,15 @@ class LoginView(View):
                 return JsonResponse({'code': 400, 'info': '用户名和密码不能为空！'})
                 
             user = SysUser.objects.get(username=username, password=password)
+            
+            # 检查用户状态
+            if not user.status:
+                return JsonResponse({'code': 403, 'info': '账号已被禁用，请联系管理员！'})
+            
+            # 更新最后登录时间
+            user.login_date = timezone.now()
+            user.save()
+                
             jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
             jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
             # 将用户对象传递进去，获取到该对象的属性值
@@ -61,7 +71,6 @@ class SaveView(View):
 
     def post(self, request):
         data = json.loads(request.body.decode("utf-8"))
-        print(data)
         if data['id'] == -1:  # 添加
             obj_sysUser = SysUser(username=data['username'], password=data['password'],
                                   email=data['email'], phonenumber=data['phonenumber'],
@@ -89,9 +98,13 @@ class ActionView(View):
         :param request:
         :return:
         """
-        id = request.GET.get("id")
-        user_object = SysUser.objects.get(id=id)
-        return JsonResponse({'code': 200, 'user': SysUserSerializer(user_object).data})
+        try:
+            id = request.GET.get("id")
+            user_object = SysUser.objects.get(id=id)
+            serialized_data = SysUserSerializer(user_object).data
+            return JsonResponse({'code': 200, 'user': serialized_data})
+        except Exception as e:
+            return JsonResponse({'code': 500, 'info': '获取用户信息失败'})
 
     def delete(self, request):
         """
@@ -109,7 +122,6 @@ class CheckView(View):
     def post(self, request):
         data = json.loads(request.body.decode("utf-8"))
         username = data['username']
-        print("username=", username)
         if SysUser.objects.filter(username=username).exists():
             return JsonResponse({'code': 500})
         else:
@@ -137,32 +149,49 @@ class ImageView(View):
 
     def post(self, request):
         file = request.FILES.get('avatar')
-        print("file:", file)
         if file:
-            file_name = file.name
-            suffixName = file_name[file_name.rfind("."):]
-            new_file_name = datetime.now().strftime('%Y%m%d%H%M%S') + suffixName
-            file_path = str(settings.MEDIA_ROOT) + "\\userAvatar\\" + new_file_name
-            print("file_path:", file_path)
             try:
-                with open(file_path, 'wb') as f:
+                # 确保目录存在
+                upload_dir = settings.MEDIA_ROOT / 'userAvatar'
+                upload_dir.mkdir(parents=True, exist_ok=True)
+                
+                # 生成文件名，只保留文件名部分
+                original_name = file.name.split('/')[-1].split('\\')[-1]
+                suffix = original_name[original_name.rfind("."):]
+                new_file_name = datetime.now().strftime('%Y%m%d%H%M%S') + suffix
+                
+                # 保存文件
+                file_path = upload_dir / new_file_name
+                with open(file_path, 'wb+') as f:
                     for chunk in file.chunks():
                         f.write(chunk)
+                
+                # 只返回文件名
                 return JsonResponse({'code': 200, 'title': new_file_name})
-            except:
+            except Exception as e:
+                print(f"Upload error: {e}")
                 return JsonResponse({'code': 500, 'errorInfo': '上传头像失败'})
+        return JsonResponse({'code': 400, 'errorInfo': '没有收到文件'})
 
 
 class AvatarView(View):
 
     def post(self, request):
-        data = json.loads(request.body.decode("utf-8"))
-        id = data['id']
-        avatar = data['avatar']
-        obj_user = SysUser.objects.get(id=id)
-        obj_user.avatar = avatar
-        obj_user.save()
-        return JsonResponse({'code': 200})
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+            id = data['id']
+            avatar = data['avatar']
+            
+            # 确保avatar只包含文件名，移除所有可能的路径前缀
+            avatar = avatar.split('/')[-1].split('\\')[-1]
+            
+            obj_user = SysUser.objects.get(id=id)
+            obj_user.avatar = avatar  # 数据库中只存储文件名
+            obj_user.save()
+            return JsonResponse({'code': 200})
+        except Exception as e:
+            print(f"Update avatar error: {e}")
+            return JsonResponse({'code': 500, 'errorInfo': '更新头像失败'})
 
 
 class SearchView(View):
@@ -172,9 +201,7 @@ class SearchView(View):
         pageNum = data['pageNum']  # 当前页
         pageSize = data['pageSize']  # 每页大小
         query = data['query']  # 查询参数
-        print(pageSize, pageNum)
         userListPage = Paginator(SysUser.objects.filter(username__icontains=query), pageSize).page(pageNum)
-        print(userListPage)
         obj_users = userListPage.object_list.values()  # 转成字典
         users = list(obj_users)  # 把外层的容器转成List
         # 不再查询角色信息，添加一个空的roleList
