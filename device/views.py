@@ -3,8 +3,12 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from django.db import transaction  # 添加事务导入
-from .models import Device, DeviceStatus, Building, Floor
-from .serializers import DeviceSerializer, DeviceStatusSerializer, DeviceCreateSerializer, DeviceUpdateSerializer, BuildingTreeSerializer
+from .models import Device, DeviceStatus, Building, Floor, Company, Department, DeviceAlarm
+from .serializers import (
+    DeviceSerializer, DeviceStatusSerializer, DeviceCreateSerializer, 
+    DeviceUpdateSerializer, BuildingTreeSerializer, CompanySerializer,
+    DepartmentSerializer, DeviceAlarmSerializer, CompanyTreeSerializer, GatewayTreeSerializer
+)
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -30,6 +34,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             'set_temp': device.set_temp,
             'status': device.status,
             'mode': device.mode,
+            'fan_speed': device.fan_speed,
             'running_time': device.running_time,
             'is_auto': device.is_auto,
             'last_updated': device.last_updated,
@@ -215,6 +220,12 @@ class DeviceViewSet(viewsets.ModelViewSet):
                             if new_mode != device.mode:
                                 updates_needed['mode'] = new_mode
                         
+                        # 检查风速是否需要更新
+                        if 'fan_speed' in control_data:
+                            new_fan_speed = int(control_data['fan_speed'])
+                            if new_fan_speed != device.fan_speed:
+                                updates_needed['fan_speed'] = new_fan_speed
+                        
                         print("需要更新的字段:", updates_needed)
                         
                         # 只有在有需要更新的字段时才进行更新
@@ -227,6 +238,8 @@ class DeviceViewSet(viewsets.ModelViewSet):
                                 device.set_temp = updates_needed['temp']
                             if 'mode' in updates_needed:
                                 device.mode = updates_needed['mode']
+                            if 'fan_speed' in updates_needed:
+                                device.fan_speed = updates_needed['fan_speed']
                             
                             device.save()
                             print("设备保存成功")
@@ -238,6 +251,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
                                 set_temp=device.set_temp,
                                 status=device.status,
                                 mode=device.mode,
+                                fan_speed=device.fan_speed,  # 添加风速记录
                                 change_type='batch'  # 添加更改类型
                             )
                             print("状态历史记录创建成功")
@@ -257,7 +271,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 updated_devices = Device.objects.filter(id__in=device_ids)
                 print("\n最终的设备状态:")
                 for device in updated_devices:
-                    print(f"设备 {device.name}: 状态={device.status}, 温度={device.set_temp}, 模式={device.mode}")
+                    print(f"设备 {device.name}: 状态={device.status}, 温度={device.set_temp}, 模式={device.mode}, 风速={device.fan_speed}")
                 
                 serializer = DeviceSerializer(updated_devices, many=True)
                 
@@ -317,6 +331,26 @@ class DeviceViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         finally:
             print("=== 设备更新请求结束 ===\n")
+
+    @action(detail=False, methods=['get'])
+    def by_company(self, request):
+        """按公司筛选设备"""
+        company_id = request.query_params.get('company_id')
+        if company_id:
+            devices = Device.objects.filter(company_id=company_id)
+            serializer = DeviceSerializer(devices, many=True)
+            return Response(serializer.data)
+        return Response({"error": "missing company_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'])
+    def by_department(self, request):
+        """按部门筛选设备"""
+        department_id = request.query_params.get('department_id')
+        if department_id:
+            devices = Device.objects.filter(department_id=department_id)
+            serializer = DeviceSerializer(devices, many=True)
+            return Response(serializer.data)
+        return Response({"error": "missing department_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
 
 class BuildingViewSet(viewsets.ModelViewSet):
     """建筑视图集"""
@@ -411,3 +445,97 @@ def device_list(request):
     # 序列化并返回结果
     serializer = DeviceSerializer(queryset, many=True)
     return Response(serializer.data)
+
+class CompanyViewSet(viewsets.ModelViewSet):
+    """公司视图集"""
+    queryset = Company.objects.all()
+    serializer_class = CompanySerializer
+
+class DepartmentViewSet(viewsets.ModelViewSet):
+    """部门视图集"""
+    queryset = Department.objects.all()
+    serializer_class = DepartmentSerializer
+    
+    @action(detail=False, methods=['get'])
+    def by_company(self, request):
+        """按公司筛选部门"""
+        company_id = request.query_params.get('company_id')
+        if company_id:
+            departments = Department.objects.filter(company_id=company_id)
+            serializer = DepartmentSerializer(departments, many=True)
+            return Response(serializer.data)
+        return Response({"error": "missing company_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
+
+class DeviceAlarmViewSet(viewsets.ModelViewSet):
+    """设备报警视图集"""
+    queryset = DeviceAlarm.objects.all()
+    serializer_class = DeviceAlarmSerializer
+    
+    @action(detail=False, methods=['get'])
+    def by_device(self, request):
+        """按设备筛选报警"""
+        device_id = request.query_params.get('device_id')
+        if device_id:
+            alarms = DeviceAlarm.objects.filter(device_id=device_id)
+            serializer = DeviceAlarmSerializer(alarms, many=True)
+            return Response(serializer.data)
+        return Response({"error": "missing device_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'])
+    def unhandled(self, request):
+        """获取未处理的报警"""
+        alarms = DeviceAlarm.objects.filter(is_handled=False)
+        serializer = DeviceAlarmSerializer(alarms, many=True)
+        return Response(serializer.data)
+
+@api_view(['GET'])
+def get_building_tree(request):
+    """获取楼栋-楼层树形结构"""
+    buildings = Building.objects.all()
+    serializer = BuildingTreeSerializer(buildings, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def get_company_tree(request):
+    """获取公司-部门树形结构"""
+    companies = Company.objects.all()
+    serializer = CompanyTreeSerializer(companies, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def get_gateway_tree(request):
+    """获取网关-设备树形结构"""
+    # 获取所有不重复的uuid作为网关节点
+    gateways = Device.objects.filter(uuid__isnull=False).values('uuid').distinct()
+    # 为每个uuid获取一个代表设备
+    gateway_devices = []
+    for gateway in gateways:
+        device = Device.objects.filter(uuid=gateway['uuid']).first()
+        if device:
+            gateway_devices.append(device)
+    serializer = GatewayTreeSerializer(gateway_devices, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def get_all_trees(request):
+    """获取所有组织架构树形结构"""
+    buildings = Building.objects.all()
+    companies = Company.objects.all()
+    
+    # 获取所有不重复的uuid作为网关节点
+    gateways = Device.objects.filter(uuid__isnull=False).values('uuid').distinct()
+    gateway_devices = []
+    for gateway in gateways:
+        device = Device.objects.filter(uuid=gateway['uuid']).first()
+        if device:
+            gateway_devices.append(device)
+
+    building_tree = BuildingTreeSerializer(buildings, many=True).data
+    company_tree = CompanyTreeSerializer(companies, many=True).data
+    gateway_tree = GatewayTreeSerializer(gateway_devices, many=True).data
+
+    return Response({
+        'building_tree': building_tree,
+        'company_tree': company_tree,
+        'gateway_tree': gateway_tree
+    })
