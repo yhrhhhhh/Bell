@@ -1,11 +1,6 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import ControlCommandViewSet, BatchCommandViewSet
-
-router = DefaultRouter()
-router.register(r'commands', ControlCommandViewSet)
-router.register(r'batch-commands', BatchCommandViewSet)
+from django.urls import path
+from . import views
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('send/', views.send_command, name='mqtt-send'),
 ]

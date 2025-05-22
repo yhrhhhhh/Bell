@@ -1,11 +1,13 @@
 from django.apps import AppConfig
 
 
-class ControlConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "control"
+class MqttServiceConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'mqtt_service'
 
     def ready(self):
-        """应用启动时连接到 MQTT 代理服务器"""
-        from .mqtt import mqtt_client
-        mqtt_client.connect()
+        # 只在主进程启动时运行，避免在迁移等操作时运行
+        import os
+        if os.environ.get('RUN_MAIN') == 'true' or os.environ.get('RUN_MAIN') is None:
+            from .mqtt_client import mqtt_client
+            mqtt_client.start()
