@@ -3,11 +3,11 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from django.db import transaction  # 添加事务导入
-from .models import Device, DeviceStatus, Building, Floor, Company, Department, DeviceAlarm
+from .models import Device, DeviceStatus, Building, Floor, Company, Department
 from .serializers import (
     DeviceSerializer, DeviceStatusSerializer, DeviceCreateSerializer, 
     DeviceUpdateSerializer, BuildingTreeSerializer, CompanySerializer,
-    DepartmentSerializer, DeviceAlarmSerializer, CompanyTreeSerializer, GatewayTreeSerializer
+    DepartmentSerializer, CompanyTreeSerializer, GatewayTreeSerializer
 )
 
 
@@ -465,28 +465,6 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             serializer = DepartmentSerializer(departments, many=True)
             return Response(serializer.data)
         return Response({"error": "missing company_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
-
-class DeviceAlarmViewSet(viewsets.ModelViewSet):
-    """设备报警视图集"""
-    queryset = DeviceAlarm.objects.all()
-    serializer_class = DeviceAlarmSerializer
-    
-    @action(detail=False, methods=['get'])
-    def by_device(self, request):
-        """按设备筛选报警"""
-        device_id = request.query_params.get('device_id')
-        if device_id:
-            alarms = DeviceAlarm.objects.filter(device_id=device_id)
-            serializer = DeviceAlarmSerializer(alarms, many=True)
-            return Response(serializer.data)
-        return Response({"error": "missing device_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['get'])
-    def unhandled(self, request):
-        """获取未处理的报警"""
-        alarms = DeviceAlarm.objects.filter(is_handled=False)
-        serializer = DeviceAlarmSerializer(alarms, many=True)
-        return Response(serializer.data)
 
 @api_view(['GET'])
 def get_building_tree(request):

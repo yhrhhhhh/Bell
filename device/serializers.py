@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Device, DeviceStatus, Building, Floor, Company, Department, DeviceAlarm
+from .models import Device, DeviceStatus, Building, Floor, Company, Department
 
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
@@ -11,13 +11,6 @@ class DepartmentSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Department
-        fields = '__all__'
-
-class DeviceAlarmSerializer(serializers.ModelSerializer):
-    device_name = serializers.CharField(source='device.name', read_only=True)
-    
-    class Meta:
-        model = DeviceAlarm
         fields = '__all__'
 
 class DeviceSerializer(serializers.ModelSerializer):

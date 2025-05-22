@@ -61,32 +61,6 @@ class Floor(models.Model):
         verbose_name_plural = "楼层管理"
         ordering = ['building', 'floor_number']
 
-class DeviceAlarm(models.Model):
-    """设备报警模型"""
-    ALARM_LEVEL_CHOICES = (
-        ('low', '低级'),
-        ('medium', '中级'),
-        ('high', '高级'),
-        ('critical', '严重'),
-    )
-    
-    device = models.ForeignKey('Device', on_delete=models.CASCADE, related_name='alarms', verbose_name="设备")
-    alarm_type = models.CharField(max_length=50, verbose_name="报警类型")
-    alarm_level = models.CharField(max_length=20, choices=ALARM_LEVEL_CHOICES, default='low', verbose_name="报警等级")
-    alarm_message = models.TextField(verbose_name="报警信息")
-    is_handled = models.BooleanField(default=False, verbose_name="是否处理")
-    handled_by = models.CharField(max_length=50, null=True, blank=True, verbose_name="处理人")
-    handled_time = models.DateTimeField(null=True, blank=True, verbose_name="处理时间")
-    create_time = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
-    
-    def __str__(self):
-        return f"{self.device.name}-{self.alarm_type}"
-    
-    class Meta:
-        verbose_name = "设备报警"
-        verbose_name_plural = "设备报警管理"
-        ordering = ['-create_time']
-
 class Device(models.Model):
     """设备模型"""
     STATUS_CHOICES = (
