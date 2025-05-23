@@ -303,7 +303,12 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 'floor_id': instance.floor.id if instance.floor else None,
                 'set_temp': instance.set_temp,
                 'mode': instance.mode,
-                'status': instance.status
+                'status': instance.status,
+                'uuid_info': {
+                    'uuid': instance.uuid.uuid if instance.uuid else None,
+                    'subscribe_topic': instance.uuid.subscribe_topic if instance.uuid else None,
+                    'publish_topic': instance.uuid.publish_topic if instance.uuid else None
+                }
             })
             
             serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
@@ -319,7 +324,12 @@ class DeviceViewSet(viewsets.ModelViewSet):
                     'floor_id': instance.floor.id if instance.floor else None,
                     'set_temp': instance.set_temp,
                     'mode': instance.mode,
-                    'status': instance.status
+                    'status': instance.status,
+                    'uuid_info': {
+                        'uuid': instance.uuid.uuid if instance.uuid else None,
+                        'subscribe_topic': instance.uuid.subscribe_topic if instance.uuid else None,
+                        'publish_topic': instance.uuid.publish_topic if instance.uuid else None
+                    }
                 })
                 return Response(serializer.data)
             else:
