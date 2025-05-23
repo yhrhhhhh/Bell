@@ -61,6 +61,34 @@ class Floor(models.Model):
         verbose_name_plural = "楼层管理"
         ordering = ['building', 'floor_number']
 
+class Topic(models.Model):
+    """MQTT Topic模型"""
+    uuid = models.CharField(max_length=100, unique=True, verbose_name='UUID')
+    subscribe_topic = models.CharField(max_length=255, verbose_name='订阅Topic路径', db_index=True)
+    publish_topic = models.CharField(max_length=255, verbose_name='发布Topic路径', db_index=True)
+    description = models.TextField(blank=True, null=True, verbose_name='描述')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    class Meta:
+        verbose_name = 'MQTT Topic'
+        verbose_name_plural = verbose_name
+        db_table = 'device_mqtt_topic'
+        indexes = [
+            models.Index(fields=['subscribe_topic']),
+            models.Index(fields=['publish_topic'])
+        ]
+
+    def __str__(self):
+        return f"{self.uuid} - Sub:{self.subscribe_topic} Pub:{self.publish_topic}"
+
+    @classmethod
+    def get_topics(cls):
+        """获取所有不重复的Topic列表"""
+        subscribe_topics = cls.objects.values_list('subscribe_topic', flat=True).distinct()
+        publish_topics = cls.objects.values_list('publish_topic', flat=True).distinct()
+        return list(set(list(subscribe_topics) + list(publish_topics)))
+
 class Device(models.Model):
     """设备模型"""
     STATUS_CHOICES = (
@@ -93,7 +121,7 @@ class Device(models.Model):
     
     name = models.CharField(max_length=100, verbose_name="设备名称")
     device_id = models.CharField(max_length=100, unique=True, verbose_name="设备ID")
-    uuid = models.CharField(max_length=100, db_index=True, verbose_name="设备UUID", null=True, blank=True)
+    uuid = models.ForeignKey(Topic, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="UUID", related_name='devices', db_column='uuid_id')
     room_id = models.IntegerField(verbose_name="房间ID")
     floor = models.ForeignKey(Floor, on_delete=models.CASCADE, related_name='devices', verbose_name="所属楼层", null=True, blank=True)
     building = models.ForeignKey(Building, on_delete=models.CASCADE, related_name='devices', verbose_name="所属建筑", null=True, blank=True)
@@ -114,33 +142,6 @@ class Device(models.Model):
     class Meta:
         verbose_name = "设备"
         verbose_name_plural = "设备管理"
-
-
-class DeviceTopic(models.Model):
-    """设备Topic模型 - 用于存储设备的MQTT主题信息"""
-    uuid = models.CharField(max_length=100, unique=True, verbose_name="设备UUID")
-    topic = models.CharField(max_length=255, verbose_name="MQTT主题")
-    description = models.TextField(null=True, blank=True, verbose_name="主题描述")
-    create_time = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
-    update_time = models.DateTimeField(auto_now=True, verbose_name="更新时间")
-
-    def __str__(self):
-        return f"{self.uuid} - {self.topic}"
-
-    class Meta:
-        verbose_name = "设备主题"
-        verbose_name_plural = "设备主题管理"
-        db_table = 'device_topic'  # 指定数据库表名
-        ordering = ['-create_time']
-
-    @property
-    def device(self):
-        """获取关联的设备实例"""
-        try:
-            return Device.objects.get(uuid=self.uuid)
-        except Device.DoesNotExist:
-            return None
-
 
 class DeviceStatus(models.Model):
     """设备状态历史记录"""

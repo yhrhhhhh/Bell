@@ -37,25 +37,37 @@ class MQTTClient:
     
     def connect(self):
         """连接到 MQTT 代理服务器"""
+        if not getattr(settings, 'MQTT_ENABLED', True):
+            logger.info("MQTT is disabled in settings")
+            return False
+            
         try:
             self.client.connect(self.broker_host, self.broker_port, 60)
             self.client.loop_start()
             logger.info(f"Connected to MQTT broker at {self.broker_host}:{self.broker_port}")
+            return True
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {str(e)}")
+            return False
     
     def disconnect(self):
         """断开与 MQTT 代理服务器的连接"""
-        self.client.loop_stop()
-        self.client.disconnect()
-        logger.info("Disconnected from MQTT broker")
+        try:
+            self.client.loop_stop()
+            self.client.disconnect()
+            logger.info("Disconnected from MQTT broker")
+        except Exception as e:
+            logger.error(f"Error disconnecting from MQTT broker: {str(e)}")
     
     def on_connect(self, client, userdata, flags, rc):
         """连接回调函数"""
         if rc == 0:
             logger.info("Successfully connected to MQTT broker")
             # 订阅设备状态主题
-            client.subscribe("device/+/status")
+            try:
+                client.subscribe("device/+/status")
+            except Exception as e:
+                logger.error(f"Error subscribing to topics: {str(e)}")
         else:
             logger.error(f"Failed to connect to MQTT broker with code: {rc}")
     
@@ -80,6 +92,16 @@ class MQTTClient:
     
     def publish_command(self, device_id, command_type, command_value):
         """发布控制命令到 MQTT"""
+        if not getattr(settings, 'MQTT_ENABLED', True):
+            logger.info("MQTT is disabled in settings")
+            return True  # 返回True以避免影响业务逻辑
+            
+        if not hasattr(self, 'client') or not self.client.is_connected():
+            logger.warning("MQTT client not connected, attempting to reconnect...")
+            if not self.connect():
+                logger.error("Failed to reconnect to MQTT broker")
+                return False
+
         topic = f"device/{device_id}/command"
         payload = {
             "command_type": command_type,

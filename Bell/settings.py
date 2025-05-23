@@ -145,7 +145,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = 'media/'
 
 # MQTT Configuration
+MQTT_ENABLED = False  # 禁用MQTT功能
 MQTT_BROKER_HOST = 'localhost'  # MQTT 代理服务器地址
 MQTT_BROKER_PORT = 1883        # MQTT 代理服务器端口
-MQTT_USERNAME = None           # MQTT 用户名（如果需要）
-MQTT_PASSWORD = None           # MQTT 密码（如果需要）
+MQTT_USERNAME = 'mqttx_local'  # MQTT 用户名
+MQTT_PASSWORD = 'dc123'       # MQTT 密码

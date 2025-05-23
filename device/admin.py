@@ -1,23 +1,42 @@
 from django.contrib import admin
-from .models import Device, DeviceTopic, Company, Department, Building, Floor, DeviceStatus
+from .models import Device, Topic, Company, Department, Building, Floor, DeviceStatus
 
-@admin.register(DeviceTopic)
-class DeviceTopicAdmin(admin.ModelAdmin):
-    list_display = ('uuid', 'topic', 'get_device_name', 'create_time', 'update_time')
-    list_filter = ('create_time', 'update_time')
-    search_fields = ('uuid', 'topic', 'description')
-    readonly_fields = ('create_time', 'update_time')
-    ordering = ('-create_time',)
-    
-    def get_device_name(self, obj):
-        device = obj.device
-        return device.name if device else '未关联设备'
-    get_device_name.short_description = '设备名称'
+@admin.register(Device)
+class DeviceAdmin(admin.ModelAdmin):
+    list_display = ('name', 'device_id', 'uuid', 'status', 'current_temp', 'set_temp', 'mode', 'fan_speed')
+    list_filter = ('status', 'mode', 'fan_speed')
+    search_fields = ('name', 'device_id', 'uuid')
 
-# 注册其他模型
-admin.site.register(Device)
-admin.site.register(Company)
-admin.site.register(Department)
-admin.site.register(Building)
-admin.site.register(Floor)
-admin.site.register(DeviceStatus)
+@admin.register(Topic)
+class TopicAdmin(admin.ModelAdmin):
+    list_display = ['uuid', 'subscribe_topic', 'publish_topic', 'description', 'created_at', 'updated_at']
+    search_fields = ['uuid', 'subscribe_topic', 'publish_topic', 'description']
+    list_filter = ['created_at', 'updated_at']
+
+@admin.register(Company)
+class CompanyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'create_time')
+    search_fields = ('name', 'code')
+
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    list_display = ('name', 'company', 'code', 'create_time')
+    list_filter = ('company',)
+    search_fields = ('name', 'code')
+
+@admin.register(Building)
+class BuildingAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'create_time')
+    search_fields = ('name', 'code')
+
+@admin.register(Floor)
+class FloorAdmin(admin.ModelAdmin):
+    list_display = ('name', 'building', 'floor_number', 'create_time')
+    list_filter = ('building',)
+    search_fields = ('name',)
+
+@admin.register(DeviceStatus)
+class DeviceStatusAdmin(admin.ModelAdmin):
+    list_display = ('device', 'current_temp', 'set_temp', 'status', 'mode', 'fan_speed', 'timestamp')
+    list_filter = ('status', 'mode', 'fan_speed')
+    search_fields = ('device__name', 'device__device_id')

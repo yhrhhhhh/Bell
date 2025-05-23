@@ -3,7 +3,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from django.db import transaction  # 添加事务导入
-from .models import Device, DeviceStatus, Building, Floor, Company, Department
+from .models import Device, DeviceStatus, Building, Floor, Company, Department, Topic
 from .serializers import (
     DeviceSerializer, DeviceStatusSerializer, DeviceCreateSerializer, 
     DeviceUpdateSerializer, BuildingTreeSerializer, CompanySerializer,
@@ -392,23 +392,70 @@ class DeviceFilterViewSet(viewsets.ModelViewSet):
     queryset = Device.objects.all()
     serializer_class = DeviceSerializer
     
-    def get_queryset(self):
-        queryset = Device.objects.all()
+    def list(self, request, *args, **kwargs):
+        """重写list方法以支持多条件筛选"""
+        print("\n=== 开始设备查询 ===")
+        queryset = self.get_queryset()
         building_id = self.request.query_params.get('building_id')
         floor_id = self.request.query_params.get('floor_id')
+        name = self.request.query_params.get('name')
+        status = self.request.query_params.get('status')
+        company_id = self.request.query_params.get('company_id')
+        department_id = self.request.query_params.get('department_id')
+        uuid = self.request.query_params.get('uuid')
+        device_id = self.request.query_params.get('device_id')
+        
+        print(f"查询参数: building_id={building_id}, floor_id={floor_id}, name={name}, "
+              f"status={status}, company_id={company_id}, department_id={department_id}, "
+              f"uuid={uuid}, device_id={device_id}")
         
         if building_id:
             queryset = queryset.filter(building_id=building_id)
+        
         if floor_id:
             try:
                 floor = Floor.objects.filter(id=floor_id).first()
                 if floor:
-                    queryset = queryset.filter(floor_id=floor.floor_number)
-                    print(f"按楼层号{floor.floor_number}筛选设备")
+                    queryset = queryset.filter(floor_id=floor.id)
+                    print(f"按楼层ID {floor.id} 筛选设备")
             except Exception as e:
                 print(f"楼层筛选出错: {str(e)}")
+        
+        if name:
+            queryset = queryset.filter(name__icontains=name)
+            print(f"按名称'{name}'筛选设备")
+        
+        if status:
+            queryset = queryset.filter(status=status)
+            print(f"按状态'{status}'筛选设备")
             
-        return queryset
+        if company_id:
+            queryset = queryset.filter(company_id=company_id)
+            
+        if department_id:
+            queryset = queryset.filter(department_id=department_id)
+            
+        if uuid:
+            queryset = queryset.filter(uuid__uuid=uuid)
+            print(f"按UUID '{uuid}' 筛选设备")
+            
+        if device_id:
+            queryset = queryset.filter(device_id=device_id)
+            print(f"按设备ID '{device_id}' 筛选设备")
+        
+        # 预加载相关数据
+        queryset = queryset.select_related(
+            'company', 'department', 'building', 'floor', 'uuid'
+        )
+        
+        # 序列化数据
+        serializer = self.get_serializer(queryset, many=True)
+        response_data = serializer.data
+        
+        print(f"\n查询到 {len(response_data)} 个设备")
+        print("=== 设备查询完成 ===\n")
+        
+        return Response(response_data)
 
 @api_view(['GET'])
 def device_list(request):
@@ -483,37 +530,190 @@ def get_company_tree(request):
 @api_view(['GET'])
 def get_gateway_tree(request):
     """获取网关-设备树形结构"""
-    # 获取所有不重复的uuid作为网关节点
-    gateways = Device.objects.filter(uuid__isnull=False).values('uuid').distinct()
-    # 为每个uuid获取一个代表设备
-    gateway_devices = []
-    for gateway in gateways:
-        device = Device.objects.filter(uuid=gateway['uuid']).first()
-        if device:
-            gateway_devices.append(device)
-    serializer = GatewayTreeSerializer(gateway_devices, many=True)
-    return Response(serializer.data)
+    try:
+        print("\n=== 开始生成网关树 ===")
+        # 获取所有不重复的UUID，排除空值
+        unique_topics = Topic.objects.all()
+        
+        print(f"找到的唯一Topic数量: {unique_topics.count()}")
+        
+        # 构建网关树
+        gateway_tree = []
+        for topic in unique_topics:
+            # 获取该UUID下的所有设备
+            devices = Device.objects.filter(uuid=topic)
+            device_count = devices.count()
+            print(f"\nUUID: {topic.uuid}, 设备数量: {device_count}")
+            
+            if device_count > 0:
+                gateway_node = {
+                    'id': topic.uuid,
+                    'label': f"{topic.uuid}",
+                    'type': 'gateway',
+                    'topic': {
+                        'subscribe': topic.subscribe_topic,
+                        'publish': topic.publish_topic
+                    },
+                    'children': []
+                }
+                
+                # 添加该UUID下的所有设备
+                for device in devices:
+                    device_node = {
+                        'id': str(device.id),
+                        'label': device.name or device.device_id,
+                        'type': 'device',
+                        'status': device.status,
+                        'uuid': topic.uuid,
+                        'device_id': device.device_id,
+                        'current_temp': device.current_temp,
+                        'set_temp': device.set_temp,
+                        'mode': device.mode,
+                        'fan_speed': device.fan_speed
+                    }
+                    gateway_node['children'].append(device_node)
+                    print(f"添加设备: {device.name or device.device_id}")
+                
+                gateway_tree.append(gateway_node)
+        
+        print("\n=== 网关树生成完成 ===")
+        print(f"总网关数量: {len(gateway_tree)}")
+        return Response(gateway_tree)
+        
+    except Exception as e:
+        print(f"获取网关树失败: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 def get_all_trees(request):
     """获取所有组织架构树形结构"""
-    buildings = Building.objects.all()
-    companies = Company.objects.all()
-    
-    # 获取所有不重复的uuid作为网关节点
-    gateways = Device.objects.filter(uuid__isnull=False).values('uuid').distinct()
-    gateway_devices = []
-    for gateway in gateways:
-        device = Device.objects.filter(uuid=gateway['uuid']).first()
-        if device:
-            gateway_devices.append(device)
+    try:
+        print("\n=== 开始生成所有树形结构 ===")
+        buildings = Building.objects.all()
+        companies = Company.objects.all()
+        
+        # 获取所有不重复的UUID
+        unique_topics = Topic.objects.all()
+        
+        print(f"找到的唯一Topic数量: {unique_topics.count()}")
+        
+        # 构建网关树
+        gateway_tree = []
+        for topic in unique_topics:
+            # 获取该UUID下的所有设备
+            devices = Device.objects.filter(uuid=topic)
+            device_count = devices.count()
+            print(f"\nUUID: {topic.uuid}, 设备数量: {device_count}")
+            
+            if device_count > 0:
+                gateway_node = {
+                    'id': topic.uuid,
+                    'label': f"{topic.uuid}",
+                    'type': 'gateway',
+                    'topic': {
+                        'subscribe': topic.subscribe_topic,
+                        'publish': topic.publish_topic
+                    },
+                    'children': []
+                }
+                
+                # 添加该UUID下的所有设备
+                for device in devices:
+                    device_node = {
+                        'id': str(device.id),
+                        'label': device.name or device.device_id,
+                        'type': 'device',
+                        'status': device.status,
+                        'uuid': topic.uuid,
+                        'device_id': device.device_id,
+                        'current_temp': device.current_temp,
+                        'set_temp': device.set_temp,
+                        'mode': device.mode,
+                        'fan_speed': device.fan_speed
+                    }
+                    gateway_node['children'].append(device_node)
+                    print(f"添加设备: {device.name or device.device_id}")
+                
+                gateway_tree.append(gateway_node)
 
-    building_tree = BuildingTreeSerializer(buildings, many=True).data
-    company_tree = CompanyTreeSerializer(companies, many=True).data
-    gateway_tree = GatewayTreeSerializer(gateway_devices, many=True).data
+        building_tree = BuildingTreeSerializer(buildings, many=True).data
+        company_tree = CompanyTreeSerializer(companies, many=True).data
 
-    return Response({
-        'building_tree': building_tree,
-        'company_tree': company_tree,
-        'gateway_tree': gateway_tree
-    })
+        print("\n=== 树形结构生成完成 ===")
+        print(f"建筑数量: {len(building_tree)}")
+        print(f"公司数量: {len(company_tree)}")
+        print(f"网关数量: {len(gateway_tree)}")
+        
+        return Response({
+            'building_tree': building_tree,
+            'company_tree': company_tree,
+            'gateway_tree': gateway_tree
+        })
+    except Exception as e:
+        print(f"获取组织架构数据失败: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def search_topic(request):
+    """根据UUID搜索Topic"""
+    uuid = request.GET.get('uuid')
+    if not uuid:
+        return Response({"error": "UUID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        topic = Topic.objects.get(uuid=uuid)
+        return Response({
+            "subscribe_topic": topic.subscribe_topic,
+            "publish_topic": topic.publish_topic,
+            "description": topic.description
+        })
+    except Topic.DoesNotExist:
+        return Response({"topic": None}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+def create_or_update_topic(request):
+    """创建或更新Topic"""
+    uuid = request.data.get('uuid')
+    subscribe_topic = request.data.get('subscribe_topic')
+    publish_topic = request.data.get('publish_topic')
+    description = request.data.get('description')
+
+    if not uuid or (not subscribe_topic and not publish_topic):
+        return Response({
+            "error": "UUID and at least one topic (subscribe or publish) are required"
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # 尝试查找现有的Topic
+        topic_obj, created = Topic.objects.update_or_create(
+            uuid=uuid,
+            defaults={
+                'subscribe_topic': subscribe_topic,
+                'publish_topic': publish_topic,
+                'description': description
+            }
+        )
+
+        return Response({
+            'success': True,
+            'created': created,
+            'topic': {
+                'uuid': topic_obj.uuid,
+                'subscribe_topic': topic_obj.subscribe_topic,
+                'publish_topic': topic_obj.publish_topic,
+                'description': topic_obj.description
+            }
+        })
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def topic_list(request):
+    """获取所有不重复的Topic列表"""
+    try:
+        topics = Topic.get_topics()
+        return Response(list(topics))
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
