@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
+import datetime
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -143,6 +144,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = 'media/'
+
+# JWT Configuration
+JWT_AUTH = {
+    'JWT_EXPIRATION_DELTA': datetime.timedelta(days=1),  # Token 过期时间设置为1天
+    'JWT_ALLOW_REFRESH': True,  # 允许刷新Token
+    'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),  # 刷新Token的有效期为7天
+}
 
 # MQTT Configuration
 MQTT_ENABLED = False  # 禁用MQTT功能

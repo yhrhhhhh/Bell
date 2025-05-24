@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     DeviceViewSet, BuildingViewSet, CompanyViewSet, DepartmentViewSet,
     DeviceFilterViewSet, get_building_tree, get_company_tree, get_gateway_tree,
-    get_all_trees, search_topic, create_or_update_topic, topic_list
+    get_all_trees, search_topic, create_or_update_topic, topic_list, get_uuid_topics
 )
 
 router = DefaultRouter()
@@ -22,4 +22,5 @@ urlpatterns = [
     path('topic/search/', search_topic, name='search-topic'),
     path('topic/create_or_update/', create_or_update_topic, name='create-or-update-topic'),
     path('topic/list/', topic_list, name='topic-list'),
+    path('topic/uuid-list/', get_uuid_topics, name='uuid-topics'),
 ]

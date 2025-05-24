@@ -108,13 +108,28 @@ class ActionView(View):
 
     def delete(self, request):
         """
-        删除操作
+        删除单个用户
         :param request:
         :return:
         """
-        idList = json.loads(request.body.decode("utf-8"))
-        SysUser.objects.filter(id__in=idList).delete()
-        return JsonResponse({'code': 200})
+        try:
+            idList = json.loads(request.body.decode("utf-8"))
+            if len(idList) != 1:
+                return JsonResponse({'code': 400, 'info': '只能删除单个用户'})
+                
+            user_id = idList[0]
+            user = SysUser.objects.get(id=user_id)
+            
+            # 检查是否是超级管理员
+            if user.username == 'python222':
+                return JsonResponse({'code': 403, 'info': '不能删除超级管理员'})
+                
+            user.delete()
+            return JsonResponse({'code': 200})
+        except SysUser.DoesNotExist:
+            return JsonResponse({'code': 404, 'info': '用户不存在'})
+        except Exception as e:
+            return JsonResponse({'code': 500, 'info': f'删除用户失败: {str(e)}'})
 
 
 class CheckView(View):

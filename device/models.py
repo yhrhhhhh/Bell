@@ -120,8 +120,8 @@ class Device(models.Model):
     ]
     
     name = models.CharField(max_length=100, verbose_name="设备名称")
-    device_id = models.CharField(max_length=100, unique=True, verbose_name="设备ID")
-    uuid = models.ForeignKey(Topic, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="UUID", related_name='devices', db_column='uuid_id')
+    device_id = models.CharField(max_length=100, db_index=True, verbose_name="设备ID")
+    uuid = models.ForeignKey(Topic, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="UUID", related_name='devices')
     room_id = models.IntegerField(verbose_name="房间ID")
     floor = models.ForeignKey(Floor, on_delete=models.CASCADE, related_name='devices', verbose_name="所属楼层", null=True, blank=True)
     building = models.ForeignKey(Building, on_delete=models.CASCADE, related_name='devices', verbose_name="所属建筑", null=True, blank=True)
@@ -142,6 +142,7 @@ class Device(models.Model):
     class Meta:
         verbose_name = "设备"
         verbose_name_plural = "设备管理"
+        unique_together = [('device_id', 'uuid')]
 
 class DeviceStatus(models.Model):
     """设备状态历史记录"""

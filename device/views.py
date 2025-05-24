@@ -727,3 +727,25 @@ def topic_list(request):
         return Response({
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def get_uuid_topics(request):
+    """获取所有UUID和对应的Topic信息"""
+    try:
+        topics = Topic.objects.all()
+        topic_list = []
+        for topic in topics:
+            topic_list.append({
+                'uuid': topic.uuid,
+                'subscribe_topic': topic.subscribe_topic,
+                'publish_topic': topic.publish_topic
+            })
+        return Response({
+            'code': 200,
+            'data': topic_list
+        })
+    except Exception as e:
+        return Response({
+            'code': 500,
+            'error': str(e)
+        })
