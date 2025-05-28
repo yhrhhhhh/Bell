@@ -42,17 +42,15 @@ class DeviceStatusSerializer(serializers.ModelSerializer):
         fields = '__all__'
         
 class DeviceCreateSerializer(serializers.ModelSerializer):
-    uuid_value = serializers.CharField(write_only=True)
-    subscribe_topic = serializers.CharField(write_only=True)
-    publish_topic = serializers.CharField(write_only=True)
+    uuid = serializers.CharField(write_only=True)  # 用于接收uuid字符串
     
     class Meta:
         model = Device
-        fields = '__all__'
+        fields = ['name', 'device_id', 'uuid', 'company', 'department', 'floor', 'current_temp', 'set_temp', 'status', 'mode', 'fan_speed', 'room_id']
 
     def validate(self, data):
         # 验证必填字段
-        required_fields = ['name', 'device_id', 'uuid_value', 'subscribe_topic', 'publish_topic', 'company', 'department', 'floor']
+        required_fields = ['name', 'device_id', 'uuid', 'company', 'department', 'floor']
         for field in required_fields:
             if field not in data:
                 raise serializers.ValidationError({field: ['该字段是必填项。']})
@@ -61,24 +59,13 @@ class DeviceCreateSerializer(serializers.ModelSerializer):
         if data['department'].company != data['company']:
             raise serializers.ValidationError({'department': ['所选部门不属于选择的公司。']})
         
-        # 验证UUID并获取或创建Topic
-        uuid_value = data.pop('uuid_value')
-        subscribe_topic = data.pop('subscribe_topic')
-        publish_topic = data.pop('publish_topic')
-        
+        # 根据uuid查找Topic记录
+        uuid_value = data.pop('uuid')
         try:
-            # 创建或更新Topic记录
-            topic, created = Topic.objects.update_or_create(
-                uuid=uuid_value,
-                defaults={
-                    'subscribe_topic': subscribe_topic,
-                    'publish_topic': publish_topic
-                }
-            )
-            # 将Topic对象添加到数据中
+            topic = Topic.objects.get(uuid=uuid_value)
             data['uuid'] = topic
-        except Exception as e:
-            raise serializers.ValidationError({'uuid_value': [f'UUID处理错误: {str(e)}']})
+        except Topic.DoesNotExist:
+            raise serializers.ValidationError({'uuid': ['未找到对应的Topic记录']})
         
         # 根据floor自动设置building
         try:
@@ -102,7 +89,10 @@ class DeviceUpdateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Device
-        fields = ['name', 'device_id', 'uuid_value', 'subscribe_topic', 'publish_topic', 'set_temp', 'mode', 'status']
+        fields = [
+            'name', 'device_id', 'uuid_value', 'subscribe_topic', 'publish_topic',
+            'set_temp', 'mode', 'status', 'building', 'floor', 'company', 'department'
+        ]
         
     def update(self, instance, validated_data):
         # 如果提供了uuid相关信息，更新Topic表
@@ -124,12 +114,19 @@ class DeviceUpdateSerializer(serializers.ModelSerializer):
                 # 更新设备的uuid关联
                 instance.uuid = topic
         
+        # 更新外键字段
+        if 'building' in validated_data:
+            instance.building_id = validated_data.pop('building')
+        if 'floor' in validated_data:
+            instance.floor_id = validated_data.pop('floor')
+        if 'company' in validated_data:
+            instance.company_id = validated_data.pop('company')
+        if 'department' in validated_data:
+            instance.department_id = validated_data.pop('department')
+            
         # 更新其他字段
-        instance.name = validated_data.get('name', instance.name)
-        instance.device_id = validated_data.get('device_id', instance.device_id)
-        instance.set_temp = validated_data.get('set_temp', instance.set_temp)
-        instance.mode = validated_data.get('mode', instance.mode)
-        instance.status = validated_data.get('status', instance.status)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         
         try:
             instance.save()

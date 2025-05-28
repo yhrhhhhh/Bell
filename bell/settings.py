@@ -95,11 +95,11 @@ WSGI_APPLICATION = 'bell.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'device_control',
+        'NAME': 'bell',
         'USER': 'root',
-        'PASSWORD': '123456',
+        'PASSWORD': 'dcny123',
         'HOST': 'localhost',
-        'PORT': '3307'
+        'PORT': '3306'
     }
 }
 

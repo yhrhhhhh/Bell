@@ -76,7 +76,6 @@ class DeviceViewSet(viewsets.ModelViewSet):
         floor_id = request.query_params.get('floor_id')
         if floor_id:
             devices = Device.objects.filter(floor_id=floor_id)
-            print(devices)
             serializer = DeviceSerializer(devices, many=True)
             return Response(serializer.data)
         return Response({"error": "missing floor_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
@@ -175,14 +174,14 @@ class DeviceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='batch-control', url_name='batch_control')
     def batch_control(self, request):
         """批量控制设备"""
-        print("\n=== 批量控制请求开始 ===")
-        print("请求数据:", request.data)
+        logger.info("\n=== 批量控制请求开始 ===")
+        logger.info(f"请求数据: {request.data}")
 
         device_ids = request.data.get('device_ids', [])
         control_data = request.data.get('control', {})
 
-        print("设备IDs:", device_ids)
-        print("控制数据:", control_data)
+        logger.info(f"设备IDs: {device_ids}")
+        logger.info(f"控制数据: {control_data}")
 
         if not device_ids:
             return Response({"error": "没有提供要控制的设备ID"}, status=status.HTTP_400_BAD_REQUEST)
@@ -197,159 +196,153 @@ class DeviceViewSet(viewsets.ModelViewSet):
         }
 
         try:
-            with transaction.atomic():  # 添加事务支持
-                # 首先刷新获取最新的设备数据
-                devices = Device.objects.filter(id__in=device_ids).select_for_update()
-                print(f"\n找到{devices.count()}个设备")
-                updated_count = 0
+            # 获取所有需要控制的设备
+            devices = Device.objects.filter(id__in=device_ids).select_related('uuid')
+            logger.info(f"查询到的设备数量: {devices.count()}")
+            
+            if not devices.exists():
+                logger.error(f"未找到指定ID的设备: {device_ids}")
+                return Response({"error": "未找到指定的设备"}, status=status.HTTP_404_NOT_FOUND)
+            
+            # 按UUID分组设备，以便批量下发
+            devices_by_uuid = {}
+            for device in devices:
+                logger.info(f"处理设备: ID={device.id}, Name={device.name}, UUID={device.uuid}")
+                
+                if not device.uuid:
+                    error_msg = "设备未绑定UUID"
+                    logger.error(f"设备 {device.id} {error_msg}")
+                    results['failed'].append(device.id)
+                    results['details'][device.id] = error_msg
+                    continue
+                    
+                if device.uuid.uuid not in devices_by_uuid:
+                    devices_by_uuid[device.uuid.uuid] = {
+                        'publish_topic': device.uuid.publish_topic,
+                        'devices': []
+                    }
+                devices_by_uuid[device.uuid.uuid]['devices'].append(device)
 
-                for device in devices:
-                    try:
-                        print(f"\n正在更新设备: {device.name} (ID: {device.id})")
+            # 对每个UUID下的设备进行批量控制
+            for uuid, data in devices_by_uuid.items():
+                device_ids_list = [device.device_id for device in data['devices']]
+                publish_topic = data['publish_topic']
+                
+                logger.info(f"准备发送控制命令到UUID: {uuid}")
+                logger.info(f"发布主题: {publish_topic}")
+                logger.info(f"设备列表: {device_ids_list}")
 
-                        # 计算需要更新的字段
-                        updates_needed = {}
+                # 构建MQTT payload
+                payload = {
+                    "sn": 12,
+                    "cmd": "control_write",
+                    "uuid": uuid,
+                    "body": {
+                        "addrs": device_ids_list,
+                    }
+                }
 
-                        # 检查运行状态是否需要更新
-                        if 'running' in control_data:
-                            new_status = 'running' if control_data['running'] else 'stopped'
-                            if new_status != device.status:
-                                updates_needed['status'] = new_status
+                # 根据控制数据添加相应的控制字段
+                device_status_convert_dict = {
+                    "fa000001400001240240614000100308": {
+                        "onOff": {"running": 1, "stopped": 0},
+                        "workMode": {"auto": 0, "cooling": 1, "heating": 2, "fan": 3, "dehumidify": 4},
+                        "fanSpeed": {}
+                    },
+                    "fa000001400001240240614000100317": {
+                        "onOff": {"running": 1, "stopped": 0},
+                        "workMode": {"auto": 0, "cooling": 1, "heating": 2, "fan": 3, "dehumidify": 4},
+                        "fanSpeed": {}
+                    }
+                }
 
-                        # 检查温度是否需要更新
-                        if 'temp' in control_data:
-                            new_temp = float(control_data['temp'])
-                            if abs(new_temp - device.set_temp) > 0.01:  # 使用小数点比较
-                                updates_needed['temp'] = new_temp
-
-                        # 检查模式是否需要更新
-                        if 'mode' in control_data:
-                            new_mode = control_data['mode']
-                            if new_mode != device.mode:
-                                updates_needed['mode'] = new_mode
-
-                        # 检查风速是否需要更新
-                        if 'fan_speed' in control_data:
-                            new_fan_speed = int(control_data['fan_speed'])
-                            if new_fan_speed != device.fan_speed:
-                                updates_needed['fan_speed'] = new_fan_speed
-
-                        print("需要更新的字段:", updates_needed)
-
-                        # 只有在有需要更新的字段时才进行更新
-                        if updates_needed:
-                            print("执行更新操作...")
-                            # 更新设备状态
-                            if 'status' in updates_needed:
-                                device.status = updates_needed['status']
-                            if 'temp' in updates_needed:
-                                device.set_temp = updates_needed['temp']
-                            if 'mode' in updates_needed:
-                                device.mode = updates_needed['mode']
-                            if 'fan_speed' in updates_needed:
-                                device.fan_speed = updates_needed['fan_speed']
-
-                            device.save()
-                            print("设备保存成功")
-
-                            # 创建状态历史记录
-                            DeviceStatus.objects.create(
-                                device=device,
-                                current_temp=device.current_temp,
-                                set_temp=device.set_temp,
-                                status=device.status,
-                                mode=device.mode,
-                                fan_speed=device.fan_speed,  # 添加风速记录
-                                change_type='batch'  # 添加更改类型
-                            )
-                            print("状态历史记录创建成功")
-
-                            updated_count += 1
-                            results['success'].append(device.id)
-                        else:
-                            print("没有需要更新的字段，跳过更新")
-                            results['details'][device.id] = "无需更新"
-
-                    except Exception as e:
-                        print(f"更新设备 {device.id} 失败: {str(e)}")
+                if uuid not in device_status_convert_dict:
+                    error_msg = f"设备UUID {uuid} 不在状态转换字典中"
+                    logger.error(error_msg)
+                    for device in data['devices']:
                         results['failed'].append(device.id)
-                        results['details'][device.id] = str(e)
+                        results['details'][device.id] = error_msg
+                    continue
 
-                # 重新获取设备列表并序列化
-                updated_devices = Device.objects.filter(id__in=device_ids)
-                print("\n最终的设备状态:")
-                for device in updated_devices:
-                    print(
-                        f"设备 {device.name}: 状态={device.status}, 温度={device.set_temp}, 模式={device.mode}, 风速={device.fan_speed}")
+                # 添加控制参数
+                try:
+                    if 'running' in control_data:
+                        payload["body"]["onOff"] = device_status_convert_dict[uuid]["onOff"]["running" if control_data['running'] else "stopped"]
+                    if 'temp' in control_data:
+                        payload["body"]["tempSet"] = float(control_data['temp'])
+                    if 'mode' in control_data:
+                        payload["body"]["workMode"] = device_status_convert_dict[uuid]["workMode"][control_data['mode']]
+                    if 'fan_speed' in control_data:
+                        payload["body"]["fanSpeed"] = int(control_data['fan_speed'])
+                except Exception as e:
+                    error_msg = f"构建控制参数失败: {str(e)}"
+                    logger.error(error_msg)
+                    for device in data['devices']:
+                        results['failed'].append(device.id)
+                        results['details'][device.id] = error_msg
+                    continue
 
-                serializer = DeviceSerializer(updated_devices, many=True)
+                # 发送MQTT消息
+                try:
+                    logger.info(f"下发批量控制命令: {payload}, topic: {publish_topic}")
+                    mqtt_client.publish(publish_topic, json.dumps(payload))
+                    
+                    # 添加到成功列表
+                    for device in data['devices']:
+                        results['success'].append(device.id)
+                    
+                    # 发送状态查询命令
+                    time.sleep(2)  # 等待2秒后查询状态
+                    query_payload = {
+                        "sn": 11,
+                        "cmd": "status_read",
+                        "uuid": uuid,
+                        "body": {
+                            "cmd": "addrs",
+                            "addrs": device_ids_list
+                        }
+                    }
+                    mqtt_client.publish(publish_topic, json.dumps(query_payload))
+                    
+                except Exception as e:
+                    error_msg = f"MQTT发送失败: {str(e)}"
+                    logger.error(error_msg)
+                    for device in data['devices']:
+                        results['failed'].append(device.id)
+                        results['details'][device.id] = error_msg
 
-                print("\n=== 批量控制请求完成 ===")
-                return Response({
-                    "message": f"成功更新{len(results['success'])}个设备，失败{len(results['failed'])}个设备",
-                    "results": results,
-                    "devices": serializer.data
-                })
+            # 获取更新后的设备列表
+            updated_devices = Device.objects.filter(id__in=device_ids)
+            serializer = DeviceSerializer(updated_devices, many=True)
+
+            logger.info("\n=== 批量控制请求完成 ===")
+            logger.info(f"成功: {len(results['success'])}个, 失败: {len(results['failed'])}个")
+            return Response({
+                "message": f"成功发送{len(results['success'])}个设备的控制命令，失败{len(results['failed'])}个设备",
+                "results": results,
+                "devices": serializer.data
+            })
 
         except Exception as e:
-            print(f"\n批量控制失败: {str(e)}")
+            logger.error(f"\n批量控制失败: {str(e)}")
             return Response({
                 "error": f"控制失败：{str(e)}",
                 "results": results
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def update(self, request, *args, **kwargs):
-        print("\n=== 设备更新请求开始 ===")
-        print("请求数据:", request.data)
-        print("设备ID:", kwargs.get('pk'))
-
         try:
             instance = self.get_object()
-            print("当前设备信息:", {
-                'id': instance.id,
-                'name': instance.name,
-                'device_id': instance.device_id,
-                'floor_id': instance.floor.id if instance.floor else None,
-                'set_temp': instance.set_temp,
-                'mode': instance.mode,
-                'status': instance.status,
-                'uuid_info': {
-                    'uuid': instance.uuid.uuid if instance.uuid else None,
-                    'subscribe_topic': instance.uuid.subscribe_topic if instance.uuid else None,
-                    'publish_topic': instance.uuid.publish_topic if instance.uuid else None
-                }
-            })
-
             serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
-            print("序列化器:", serializer.__class__.__name__)
 
             if serializer.is_valid():
-                print("验证通过的数据:", serializer.validated_data)
                 self.perform_update(serializer)
-                print("更新后的设备信息:", {
-                    'id': instance.id,
-                    'name': instance.name,
-                    'device_id': instance.device_id,
-                    'floor_id': instance.floor.id if instance.floor else None,
-                    'set_temp': instance.set_temp,
-                    'mode': instance.mode,
-                    'status': instance.status,
-                    'uuid_info': {
-                        'uuid': instance.uuid.uuid if instance.uuid else None,
-                        'subscribe_topic': instance.uuid.subscribe_topic if instance.uuid else None,
-                        'publish_topic': instance.uuid.publish_topic if instance.uuid else None
-                    }
-                })
                 return Response(serializer.data)
             else:
-                print("验证错误:", serializer.errors)
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
-            print("更新过程中出现错误:", str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        finally:
-            print("=== 设备更新请求结束 ===\n")
 
     @action(detail=False, methods=['get'])
     def by_company(self, request):
@@ -415,7 +408,6 @@ class DeviceFilterViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         """重写list方法以支持多条件筛选"""
-        print("\n=== 开始设备查询 ===")
         queryset = self.get_queryset()
         building_id = self.request.query_params.get('building_id')
         floor_id = self.request.query_params.get('floor_id')
@@ -426,10 +418,6 @@ class DeviceFilterViewSet(viewsets.ModelViewSet):
         uuid = self.request.query_params.get('uuid')
         device_id = self.request.query_params.get('device_id')
 
-        print(f"查询参数: building_id={building_id}, floor_id={floor_id}, name={name}, "
-              f"status={status}, company_id={company_id}, department_id={department_id}, "
-              f"uuid={uuid}, device_id={device_id}")
-
         if building_id:
             queryset = queryset.filter(building_id=building_id)
 
@@ -438,17 +426,14 @@ class DeviceFilterViewSet(viewsets.ModelViewSet):
                 floor = Floor.objects.filter(id=floor_id).first()
                 if floor:
                     queryset = queryset.filter(floor_id=floor.id)
-                    print(f"按楼层ID {floor.id} 筛选设备")
             except Exception as e:
-                print(f"楼层筛选出错: {str(e)}")
+                logger.error(f"楼层筛选出错: {str(e)}")
 
         if name:
             queryset = queryset.filter(name__icontains=name)
-            print(f"按名称'{name}'筛选设备")
 
         if status:
             queryset = queryset.filter(status=status)
-            print(f"按状态'{status}'筛选设备")
 
         if company_id:
             queryset = queryset.filter(company_id=company_id)
@@ -458,11 +443,9 @@ class DeviceFilterViewSet(viewsets.ModelViewSet):
 
         if uuid:
             queryset = queryset.filter(uuid__uuid=uuid)
-            print(f"按UUID '{uuid}' 筛选设备")
 
         if device_id:
             queryset = queryset.filter(device_id=device_id)
-            print(f"按设备ID '{device_id}' 筛选设备")
 
         # 预加载相关数据
         queryset = queryset.select_related(
@@ -471,12 +454,7 @@ class DeviceFilterViewSet(viewsets.ModelViewSet):
 
         # 序列化数据
         serializer = self.get_serializer(queryset, many=True)
-        response_data = serializer.data
-
-        print(f"\n查询到 {len(response_data)} 个设备")
-        print("=== 设备查询完成 ===\n")
-
-        return Response(response_data)
+        return Response(serializer.data)
 
 
 @api_view(['GET'])
@@ -558,19 +536,12 @@ def get_company_tree(request):
 def get_gateway_tree(request):
     """获取网关-设备树形结构"""
     try:
-        print("\n=== 开始生成网关树 ===")
-        # 获取所有不重复的UUID，排除空值
         unique_topics = Topic.objects.all()
-
-        print(f"找到的唯一Topic数量: {unique_topics.count()}")
-
-        # 构建网关树
         gateway_tree = []
+        
         for topic in unique_topics:
-            # 获取该UUID下的所有设备
             devices = Device.objects.filter(uuid=topic)
             device_count = devices.count()
-            print(f"\nUUID: {topic.uuid}, 设备数量: {device_count}")
 
             if device_count > 0:
                 gateway_node = {
@@ -584,7 +555,6 @@ def get_gateway_tree(request):
                     'children': []
                 }
 
-                # 添加该UUID下的所有设备
                 for device in devices:
                     device_node = {
                         'id': str(device.id),
@@ -599,16 +569,13 @@ def get_gateway_tree(request):
                         'fan_speed': device.fan_speed
                     }
                     gateway_node['children'].append(device_node)
-                    print(f"添加设备: {device.name or device.device_id}")
 
                 gateway_tree.append(gateway_node)
 
-        print("\n=== 网关树生成完成 ===")
-        print(f"总网关数量: {len(gateway_tree)}")
         return Response(gateway_tree)
 
     except Exception as e:
-        print(f"获取网关树失败: {str(e)}")
+        logger.error(f"获取网关树失败: {str(e)}")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -616,22 +583,15 @@ def get_gateway_tree(request):
 def get_all_trees(request):
     """获取所有组织架构树形结构"""
     try:
-        print("\n=== 开始生成所有树形结构 ===")
         buildings = Building.objects.all()
         companies = Company.objects.all()
-
-        # 获取所有不重复的UUID
         unique_topics = Topic.objects.all()
-
-        print(f"找到的唯一Topic数量: {unique_topics.count()}")
 
         # 构建网关树
         gateway_tree = []
         for topic in unique_topics:
-            # 获取该UUID下的所有设备
             devices = Device.objects.filter(uuid=topic)
             device_count = devices.count()
-            print(f"\nUUID: {topic.uuid}, 设备数量: {device_count}")
 
             if device_count > 0:
                 gateway_node = {
@@ -645,7 +605,6 @@ def get_all_trees(request):
                     'children': []
                 }
 
-                # 添加该UUID下的所有设备
                 for device in devices:
                     device_node = {
                         'id': str(device.id),
@@ -660,17 +619,11 @@ def get_all_trees(request):
                         'fan_speed': device.fan_speed
                     }
                     gateway_node['children'].append(device_node)
-                    print(f"添加设备: {device.name or device.device_id}")
 
                 gateway_tree.append(gateway_node)
 
         building_tree = BuildingTreeSerializer(buildings, many=True).data
         company_tree = CompanyTreeSerializer(companies, many=True).data
-
-        print("\n=== 树形结构生成完成 ===")
-        print(f"建筑数量: {len(building_tree)}")
-        print(f"公司数量: {len(company_tree)}")
-        print(f"网关数量: {len(gateway_tree)}")
 
         return Response({
             'building_tree': building_tree,
@@ -678,7 +631,7 @@ def get_all_trees(request):
             'gateway_tree': gateway_tree
         })
     except Exception as e:
-        print(f"获取组织架构数据失败: {str(e)}")
+        logger.error(f"获取组织架构数据失败: {str(e)}")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -778,14 +731,13 @@ def send_command(request):
     """单个设备、单个属性 下发"""
     if request.method == 'POST':
         try:
-            #  下发属性property:"onOff": 开关, "tempSet": 温度设定, "workMode": 工作模式, "fanSpeed": 风速,
             issue_property = request.data.get('property')
             uuid = request.data.get('uuid')
             device_id = request.data.get('device_id')
             value = request.data.get('value')
             if not (device_id and uuid):
                 return JsonResponse({"error": "device_id or uuid is missing"}, status=400)
-            # 前端下发码转换字典
+            
             device_status_convert_dict = {
                 "fa000001400001240240614000100308": {"onOff": {"running": 1, "stopped": 0, },
                                                      "workMode": {"auto": 0, "cooling": 1, "heating": 2, "fan": 3,
@@ -796,12 +748,31 @@ def send_command(request):
                 "example_0": {"onOff": {"running": 0, "stopped": 1, },
                               "workMode": {"auto": 0, "cooling": 1, "heating": 2, "fan": 3, "dehumidify": 4, },
                               "fanSpeed": {}, }}
+                              
+            # 检查设备是否存在
+            try:
+                device = (
+                    Device.objects
+                    .filter(uuid__uuid=uuid, device_id=device_id)
+                    .select_related('uuid')
+                    .only('uuid__publish_topic', 'name', 'status')
+                    .first()
+                )
+                if not device:
+                    return JsonResponse({"error": "Device not found"}, status=404)
+                    
+                topic = device.uuid.publish_topic
+            except Exception as e:
+                logger.error(f"查询设备失败: {str(e)}")
+                return JsonResponse({"error": "Failed to query device"}, status=500)
+                
+            # 构造控制命令
             payload = {
                 "sn": 12,
                 "cmd": "control_write",
-                "uuid": f"{uuid}",
+                "uuid": uuid,
                 "body": {
-                    "addrs": [f"{device_id}", ],  # 不可为空 ，为空则下发全部了，必须限制设备id
+                    "addrs": [f"{device_id}", ],
                 }
             }
             if issue_property == "fanSpeed":
@@ -811,7 +782,7 @@ def send_command(request):
             else:
                 payload["body"][f"{issue_property}"] = device_status_convert_dict[f"{uuid}"][f"{issue_property}"][
                     f"{value}"]
-            # 根据查询下发topic
+                    
             topic_publish = (
                 Device.objects
                 .filter(uuid__uuid=uuid, device_id=device_id)
@@ -823,8 +794,8 @@ def send_command(request):
             logger.info(f"下发命令: {payload}, topic: {topic}")
             payload_json = json.dumps(payload)
             mqtt_client.publish(topic, payload_json)
-            # 查询当前设备状态，等回报消息，更新数据库状态记录
-            time.sleep(10)
+            
+            time.sleep(7)
             query_device_payload = {"sn": 11, "cmd": "status_read", "uuid": f"{uuid}",
                                  "body": {"cmd": "addrs", "addrs": [f"{device_id}", ]}}
             mqtt_client.publish(topic, json.dumps(query_device_payload))
@@ -834,27 +805,42 @@ def send_command(request):
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
-@api_view(["GET"])
+@api_view(['GET'])
 def query_all_device_status(request):
-    """查询所有空调状态命令下发"""
-    if request.method == 'GET':
-        try:
-            payload = {
-                "sn": 11,
+    """查询所有设备状态"""
+    try:
+        # 获取所有不重复的UUID
+        uuids = Topic.objects.values_list('uuid', flat=True).distinct()
+        
+        for uuid_current in uuids:
+            # 构造消息
+            message = {
+                "sn": 11,  # 序列号
                 "cmd": "status_read",
-                "uuid": "",
+                "uuid": uuid_current,
                 "body": {
-                    "cmd": "all"
+                    "cmd": "addrs",
+                    "addrs": ["1-3-1-0"]  # 固定地址格式
                 }
             }
-            uuid_topic_list = Topic.objects.values_list("uuid", "publish_topic")
-            logger.info(f"uuid 列表：{uuid_topic_list}")
-            for uuid_topic in uuid_topic_list:
-                uuid, topic = uuid_topic[0], uuid_topic[1]
-                payload_complete = deepcopy(payload)
-                payload_complete["uuid"] = uuid
-                payload_complete_json = json.dumps(payload_complete)
-                mqtt_client.publish(topic, payload_complete_json)
-            return JsonResponse({'status': 'Query all success'})
-        except Exception as e:
-            return JsonResponse({'status': 'Update all  failed', 'message': str(e)}, status=500)
+            
+            # 获取发布主题
+            try:
+                topic = Topic.objects.get(uuid=uuid_current)
+                publish_topic = topic.publish_topic
+                
+                # 发布消息
+                logger.info(f"正在查询设备状态: UUID={uuid_current}")
+                mqtt_client.publish(publish_topic, message)
+                
+            except Topic.DoesNotExist:
+                logger.error(f"找不到UUID对应的Topic: {uuid_current}")
+            except Exception as e:
+                logger.error(f"发送状态查询命令失败: {str(e)}")
+                continue
+        
+        return Response({"message": "状态查询命令已发送"})
+        
+    except Exception as e:
+        logger.error(f"查询设备状态失败: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
