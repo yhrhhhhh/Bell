@@ -153,7 +153,7 @@ class DeviceStatus(models.Model):
     mode = models.CharField(max_length=20, verbose_name="运行模式")
     fan_speed = models.IntegerField(verbose_name="风速", default=0)
     timestamp = models.DateTimeField(auto_now_add=True, verbose_name="记录时间")
-    
+
     class Meta:
         verbose_name = "设备状态记录"
         verbose_name_plural = "设备状态历史"

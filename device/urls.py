@@ -3,7 +3,8 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     DeviceViewSet, BuildingViewSet, CompanyViewSet, DepartmentViewSet,
     DeviceFilterViewSet, get_building_tree, get_company_tree, get_gateway_tree,
-    get_all_trees, search_topic, create_or_update_topic, topic_list, get_uuid_topics
+    get_all_trees, search_topic, create_or_update_topic, topic_list, get_uuid_topics, send_command,
+    query_all_device_status
 )
 
 router = DefaultRouter()
@@ -23,4 +24,6 @@ urlpatterns = [
     path('topic/create_or_update/', create_or_update_topic, name='create-or-update-topic'),
     path('topic/list/', topic_list, name='topic-list'),
     path('topic/uuid-list/', get_uuid_topics, name='uuid-topics'),
+    path('send/', send_command, name='mqtt-send'),
+    path('update_status/', query_all_device_status, name='mqtt-query-all-status'),
 ]
