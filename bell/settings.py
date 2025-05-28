@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'user.apps.UserConfig',
     'menu.apps.MenuConfig',
     'device.apps.DeviceConfig',
-    'control.apps.ControlConfig'
+    # 'control.apps.ControlConfig'
 ]
 
 MIDDLEWARE = [
@@ -95,11 +95,11 @@ WSGI_APPLICATION = 'bell.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'bell',
+        'NAME': 'device_control',
         'USER': 'root',
-        'PASSWORD': 'dcny123',
+        'PASSWORD': '123456',
         'HOST': 'localhost',
-        'PORT': '3306'
+        'PORT': '3307'
     }
 }
 
@@ -152,9 +152,38 @@ JWT_AUTH = {
     'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),  # 刷新Token的有效期为7天
 }
 
-# MQTT Configuration
-MQTT_ENABLED = False  # 禁用MQTT功能
-MQTT_BROKER_HOST = 'localhost'  # MQTT 代理服务器地址
-MQTT_BROKER_PORT = 1883        # MQTT 代理服务器端口
-MQTT_USERNAME = 'mqttx_local'  # MQTT 用户名
-MQTT_PASSWORD = 'dc123'       # MQTT 密码
+
+# MQTT配置
+MQTT_BROKER = '42.236.68.223'  # 你的MQTT broker地址 iotserver.zjdcny.com.cn
+MQTT_PORT = 6183
+MQTT_USERNAME = 'xinxiangliantong'
+MQTT_PASSWORD = 'xxlt250524'
+
+# 日志设置，可调等级
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',  # 设置最低日志级别
+    },
+    'loggers': {
+        'mqtt_service': {  # 您的应用专属logger
+            'handlers': ['console'],
+            'level': 'DEBUG',  # 调试时可设为DEBUG
+            'propagate': False,
+        },
+    }
+}
