@@ -4,7 +4,7 @@ from .views import (
     DeviceViewSet, BuildingViewSet, CompanyViewSet, DepartmentViewSet,
     DeviceFilterViewSet, get_building_tree, get_company_tree, get_gateway_tree,
     get_all_trees, search_topic, create_or_update_topic, topic_list, get_uuid_topics, send_command,
-    query_all_device_status
+    query_all_device_status, export_devices_excel
 )
 
 router = DefaultRouter()
@@ -26,4 +26,5 @@ urlpatterns = [
     path('topic/uuid-list/', get_uuid_topics, name='uuid-topics'),
     path('send/', send_command, name='mqtt-send'),
     path('update_status/', query_all_device_status, name='mqtt-query-all-status'),
+    path('export/', export_devices_excel, name='export-devices-excel'),
 ]

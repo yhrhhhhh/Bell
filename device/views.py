@@ -1,8 +1,9 @@
 import json
 import time
 from copy import deepcopy
-from django.http import JsonResponse
-
+from django.http import JsonResponse, HttpResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill
 from django.shortcuts import render
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
@@ -17,6 +18,9 @@ from .serializers import (
     DeviceUpdateSerializer, BuildingTreeSerializer, CompanySerializer,
     DepartmentSerializer, CompanyTreeSerializer, GatewayTreeSerializer
 )
+from urllib.parse import quote
+from io import BytesIO
+import xlwt
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -844,3 +848,46 @@ def query_all_device_status(request):
     except Exception as e:
         logger.error(f"查询设备状态失败: {str(e)}")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def export_devices_excel(request):
+    """导出设备列表到CSV"""
+    try:
+        # 创建响应
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = 'attachment; filename="devices.csv"'
+        
+        # 获取所有设备信息
+        devices = Device.objects.select_related(
+            'uuid',
+            'floor__building',
+            'company',
+            'department'
+        ).all()
+        
+        # 写入表头
+        headers = ['网关ID', '内机ID', '内机名称', '建筑', '楼栋', '公司', '部门']
+        response.write(','.join(headers) + '\n')
+        
+        # 写入数据
+        for device in devices:
+            row = [
+                device.uuid.uuid if device.uuid else '',
+                device.device_id or '',
+                device.name or '',
+                device.floor.building.name if device.floor and device.floor.building else '',
+                device.floor.name if device.floor else '',
+                device.company.name if device.company else '',
+                device.department.name if device.department else ''
+            ]
+            # 处理可能包含逗号的字段，用双引号包围
+            row = ['"' + str(field).replace('"', '""') + '"' for field in row]
+            response.write(','.join(row) + '\n')
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"导出CSV失败: {str(e)}")
+        return JsonResponse({'error': '导出失败', 'detail': str(e)}, status=500)
