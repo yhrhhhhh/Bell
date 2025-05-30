@@ -4,7 +4,7 @@ from .views import (
     DeviceViewSet, BuildingViewSet, CompanyViewSet, DepartmentViewSet,
     DeviceFilterViewSet, get_building_tree, get_company_tree, get_gateway_tree,
     get_all_trees, search_topic, create_or_update_topic, topic_list, get_uuid_topics, send_command,
-    query_all_device_status, export_devices_excel
+    query_all_device_status, export_devices_excel, FloorViewSet
 )
 
 router = DefaultRouter()
@@ -12,6 +12,7 @@ router.register(r'devices', DeviceViewSet)
 router.register(r'buildings', BuildingViewSet)
 router.register(r'companies', CompanyViewSet)
 router.register(r'departments', DepartmentViewSet)
+router.register(r'floors', FloorViewSet)
 router.register(r'filter', DeviceFilterViewSet, basename='device-filter')
 
 urlpatterns = [

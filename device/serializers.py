@@ -137,7 +137,7 @@ class DeviceUpdateSerializer(serializers.ModelSerializer):
 class FloorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Floor
-        fields = ['id', 'name', 'floor_number', 'description']
+        fields = ['id', 'name', 'floor_number', 'description', 'building']
 
 class BuildingSerializer(serializers.ModelSerializer):
     floors = FloorSerializer(many=True, read_only=True)

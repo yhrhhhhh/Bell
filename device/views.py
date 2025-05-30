@@ -16,7 +16,8 @@ from django.views.decorators.csrf import csrf_exempt
 from .serializers import (
     DeviceSerializer, DeviceStatusSerializer, DeviceCreateSerializer,
     DeviceUpdateSerializer, BuildingTreeSerializer, CompanySerializer,
-    DepartmentSerializer, CompanyTreeSerializer, GatewayTreeSerializer
+    DepartmentSerializer, CompanyTreeSerializer, GatewayTreeSerializer,
+    FloorSerializer, BuildingSerializer
 )
 from urllib.parse import quote
 from io import BytesIO
@@ -372,130 +373,54 @@ class DeviceViewSet(viewsets.ModelViewSet):
 class BuildingViewSet(viewsets.ModelViewSet):
     """建筑视图集"""
     queryset = Building.objects.all()
-    serializer_class = BuildingTreeSerializer
+    serializer_class = BuildingSerializer  # 修改默认序列化器
+
+    def get_serializer_class(self):
+        """根据不同的action返回不同的序列化器"""
+        if self.action == 'tree':
+            return BuildingTreeSerializer
+        return BuildingSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        """删除建筑时，将关联设备的building字段设为null"""
+        building = self.get_object()
+        # 获取关联的设备
+        devices = Device.objects.filter(building=building)
+        # 将设备的building字段设为null
+        devices.update(building=None)
+        # 删除建筑（会自动删除关联的楼层，因为是CASCADE关系）
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['get'])
+    def floors(self, request, pk=None):
+        """获取指定建筑的楼层列表"""
+        building = self.get_object()
+        floors = Floor.objects.filter(building=building)
+        serializer = FloorSerializer(floors, many=True)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def tree(self, request):
         """获取建筑和楼层的树形结构"""
-        print("\n=== 开始生成建筑树形结构 ===")
-
         buildings = Building.objects.prefetch_related('floors').all()
-        print(f"\n查询到的建筑数量: {buildings.count()}")
-
-        for building in buildings:
-            print(f"\n建筑: {building.name} (ID: {building.id})")
-            floors = building.floors.all()
-            print(f"  楼层数量: {floors.count()}")
-            for floor in floors:
-                print(f"  - {floor.name} (ID: {floor.id}, 楼层号: {floor.floor_number})")
-
         serializer = BuildingTreeSerializer(buildings, many=True)
-        data = serializer.data
-        print("\n序列化后的数据:")
-        for building in data:
-            print(f"\n建筑: {building['label']} (ID: {building['id']})")
-            for floor in building['children']:
-                print(f"  - {floor['label']} (ID: {floor['id']}, 楼层号: {floor.get('floor_number')})")
-
-        # 确保返回的是列表
-        if not isinstance(data, list):
-            data = [data]
-
-        return Response(data)
-
-
-# 重命名为DeviceFilterViewSet以避免与上面的DeviceViewSet冲突
-class DeviceFilterViewSet(viewsets.ModelViewSet):
-    """设备筛选视图集"""
-    queryset = Device.objects.all()
-    serializer_class = DeviceSerializer
-
-    def list(self, request, *args, **kwargs):
-        """重写list方法以支持多条件筛选"""
-        queryset = self.get_queryset()
-        building_id = self.request.query_params.get('building_id')
-        floor_id = self.request.query_params.get('floor_id')
-        name = self.request.query_params.get('name')
-        status = self.request.query_params.get('status')
-        company_id = self.request.query_params.get('company_id')
-        department_id = self.request.query_params.get('department_id')
-        uuid = self.request.query_params.get('uuid')
-        device_id = self.request.query_params.get('device_id')
-
-        if building_id:
-            queryset = queryset.filter(building_id=building_id)
-
-        if floor_id:
-            try:
-                floor = Floor.objects.filter(id=floor_id).first()
-                if floor:
-                    queryset = queryset.filter(floor_id=floor.id)
-            except Exception as e:
-                logger.error(f"楼层筛选出错: {str(e)}")
-
-        if name:
-            queryset = queryset.filter(name__icontains=name)
-
-        if status:
-            queryset = queryset.filter(status=status)
-
-        if company_id:
-            queryset = queryset.filter(company_id=company_id)
-
-        if department_id:
-            queryset = queryset.filter(department_id=department_id)
-
-        if uuid:
-            queryset = queryset.filter(uuid__uuid=uuid)
-
-        if device_id:
-            queryset = queryset.filter(device_id=device_id)
-
-        # 预加载相关数据
-        queryset = queryset.select_related(
-            'company', 'department', 'building', 'floor', 'uuid'
-        )
-
-        # 序列化数据
-        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
 
-@api_view(['GET'])
-def device_list(request):
-    """设备列表API，支持按楼层和建筑筛选"""
-    queryset = Device.objects.all()
+class FloorViewSet(viewsets.ModelViewSet):
+    """楼层视图集"""
+    queryset = Floor.objects.all()
+    serializer_class = FloorSerializer
 
-    # 获取筛选参数
-    building_id = request.query_params.get('building_id')
-    floor_id = request.query_params.get('floor_id')
-    name = request.query_params.get('name')
-    status = request.query_params.get('status')
-
-    # 应用筛选条件
-    if floor_id:
-        try:
-            # 先从Floor表获取floor_number
-            floor = Floor.objects.filter(id=floor_id).first()
-            if floor:
-                queryset = queryset.filter(floor_id=floor.floor_number)
-            else:
-                return Response({"error": f"未找到ID为{floor_id}的楼层"}, status=400)
-        except Exception as e:
-            return Response({"error": f"楼层筛选出错: {str(e)}"}, status=400)
-
-    if building_id:
-        queryset = queryset.filter(building_id=building_id)
-
-    if name:
-        queryset = queryset.filter(name__icontains=name)
-
-    if status:
-        queryset = queryset.filter(status=status)
-
-    # 序列化并返回结果
-    serializer = DeviceSerializer(queryset, many=True)
-    return Response(serializer.data)
+    def destroy(self, request, *args, **kwargs):
+        """删除楼层时，将关联设备的floor字段设为null"""
+        floor = self.get_object()
+        # 获取关联的设备
+        devices = Device.objects.filter(floor=floor)
+        # 将设备的floor字段设为null
+        devices.update(floor=None)
+        # 删除楼层
+        return super().destroy(request, *args, **kwargs)
 
 
 class CompanyViewSet(viewsets.ModelViewSet):
@@ -503,11 +428,31 @@ class CompanyViewSet(viewsets.ModelViewSet):
     queryset = Company.objects.all()
     serializer_class = CompanySerializer
 
+    def destroy(self, request, *args, **kwargs):
+        """删除公司时，将关联设备的company字段设为null"""
+        company = self.get_object()
+        # 获取关联的设备
+        devices = Device.objects.filter(company=company)
+        # 将设备的company字段设为null
+        devices.update(company=None, department=None)
+        # 删除公司（会自动删除关联的部门，因为是CASCADE关系）
+        return super().destroy(request, *args, **kwargs)
+
 
 class DepartmentViewSet(viewsets.ModelViewSet):
     """部门视图集"""
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        """删除部门时，将关联设备的department字段设为null"""
+        department = self.get_object()
+        # 获取关联的设备
+        devices = Device.objects.filter(department=department)
+        # 将设备的department字段设为null
+        devices.update(department=None)
+        # 删除部门
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=['get'])
     def by_company(self, request):
@@ -891,3 +836,60 @@ def export_devices_excel(request):
     except Exception as e:
         logger.error(f"导出CSV失败: {str(e)}")
         return JsonResponse({'error': '导出失败', 'detail': str(e)}, status=500)
+
+
+# 重新添加DeviceFilterViewSet
+class DeviceFilterViewSet(viewsets.ModelViewSet):
+    """设备筛选视图集"""
+    queryset = Device.objects.all()
+    serializer_class = DeviceSerializer
+
+    def list(self, request, *args, **kwargs):
+        """重写list方法以支持多条件筛选"""
+        queryset = self.get_queryset()
+        building_id = self.request.query_params.get('building_id')
+        floor_id = self.request.query_params.get('floor_id')
+        name = self.request.query_params.get('name')
+        status = self.request.query_params.get('status')
+        company_id = self.request.query_params.get('company_id')
+        department_id = self.request.query_params.get('department_id')
+        uuid = self.request.query_params.get('uuid')
+        device_id = self.request.query_params.get('device_id')
+
+        if building_id:
+            queryset = queryset.filter(building_id=building_id)
+
+        if floor_id:
+            try:
+                floor = Floor.objects.filter(id=floor_id).first()
+                if floor:
+                    queryset = queryset.filter(floor_id=floor.id)
+            except Exception as e:
+                logger.error(f"楼层筛选出错: {str(e)}")
+
+        if name:
+            queryset = queryset.filter(name__icontains=name)
+
+        if status:
+            queryset = queryset.filter(status=status)
+
+        if company_id:
+            queryset = queryset.filter(company_id=company_id)
+
+        if department_id:
+            queryset = queryset.filter(department_id=department_id)
+
+        if uuid:
+            queryset = queryset.filter(uuid__uuid=uuid)
+
+        if device_id:
+            queryset = queryset.filter(device_id=device_id)
+
+        # 预加载相关数据
+        queryset = queryset.select_related(
+            'company', 'department', 'building', 'floor', 'uuid'
+        )
+
+        # 序列化数据
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
