@@ -67,6 +67,7 @@ class Topic(models.Model):
     subscribe_topic = models.CharField(max_length=255, verbose_name='订阅Topic路径', db_index=True)
     publish_topic = models.CharField(max_length=255, verbose_name='发布Topic路径', db_index=True)
     description = models.TextField(blank=True, null=True, verbose_name='描述')
+    # TODO 在线状态字段
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 

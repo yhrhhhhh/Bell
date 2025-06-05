@@ -204,23 +204,23 @@ class DeviceViewSet(viewsets.ModelViewSet):
             # 获取所有需要控制的设备
             devices = Device.objects.filter(id__in=device_ids).select_related('uuid')
             logger.info(f"查询到的设备数量: {devices.count()}")
-            
+
             if not devices.exists():
                 logger.error(f"未找到指定ID的设备: {device_ids}")
                 return Response({"error": "未找到指定的设备"}, status=status.HTTP_404_NOT_FOUND)
-            
+
             # 按UUID分组设备，以便批量下发
             devices_by_uuid = {}
             for device in devices:
                 logger.info(f"处理设备: ID={device.id}, Name={device.name}, UUID={device.uuid}")
-                
+
                 if not device.uuid:
                     error_msg = "设备未绑定UUID"
                     logger.error(f"设备 {device.id} {error_msg}")
                     results['failed'].append(device.id)
                     results['details'][device.id] = error_msg
                     continue
-                    
+
                 if device.uuid.uuid not in devices_by_uuid:
                     devices_by_uuid[device.uuid.uuid] = {
                         'publish_topic': device.uuid.publish_topic,
@@ -232,7 +232,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             for uuid, data in devices_by_uuid.items():
                 device_ids_list = [device.device_id for device in data['devices']]
                 publish_topic = data['publish_topic']
-                
+
                 logger.info(f"准备发送控制命令到UUID: {uuid}")
                 logger.info(f"发布主题: {publish_topic}")
                 logger.info(f"设备列表: {device_ids_list}")
@@ -272,7 +272,8 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 # 添加控制参数
                 try:
                     if 'running' in control_data:
-                        payload["body"]["onOff"] = device_status_convert_dict[uuid]["onOff"]["running" if control_data['running'] else "stopped"]
+                        payload["body"]["onOff"] = device_status_convert_dict[uuid]["onOff"][
+                            "running" if control_data['running'] else "stopped"]
                     if 'temp' in control_data:
                         payload["body"]["tempSet"] = float(control_data['temp'])
                     if 'mode' in control_data:
@@ -291,11 +292,11 @@ class DeviceViewSet(viewsets.ModelViewSet):
                 try:
                     logger.info(f"下发批量控制命令: {payload}, topic: {publish_topic}")
                     mqtt_client.publish(publish_topic, json.dumps(payload))
-                    
+
                     # 添加到成功列表
                     for device in data['devices']:
                         results['success'].append(device.id)
-                    
+
                     # 发送状态查询命令
                     time.sleep(2)  # 等待2秒后查询状态
                     query_payload = {
@@ -308,7 +309,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
                         }
                     }
                     mqtt_client.publish(publish_topic, json.dumps(query_payload))
-                    
+
                 except Exception as e:
                     error_msg = f"MQTT发送失败: {str(e)}"
                     logger.error(error_msg)
@@ -487,7 +488,7 @@ def get_gateway_tree(request):
     try:
         unique_topics = Topic.objects.all()
         gateway_tree = []
-        
+
         for topic in unique_topics:
             devices = Device.objects.filter(uuid=topic)
             device_count = devices.count()
@@ -686,7 +687,7 @@ def send_command(request):
             value = request.data.get('value')
             if not (device_id and uuid):
                 return JsonResponse({"error": "device_id or uuid is missing"}, status=400)
-            
+
             device_status_convert_dict = {
                 "fa000001400001240240614000100308": {"onOff": {"running": 1, "stopped": 0, },
                                                      "workMode": {"auto": 0, "cooling": 1, "heating": 2, "fan": 3,
@@ -694,10 +695,13 @@ def send_command(request):
                 "fa000001400001240240614000100317": {"onOff": {"running": 1, "stopped": 0, },
                                                      "workMode": {"auto": 0, "cooling": 1, "heating": 2, "fan": 3,
                                                                   "dehumidify": 4, }, "fanSpeed": {}, },
+                "fa000001400001240240615000100165": {"onOff": {"running": 1, "stopped": 0, },
+                                                     "workMode": {"auto": 0, "cooling": 1, "heating": 2, "fan": 3,
+                                                                  "dehumidify": 4, }, "fanSpeed": {}, },
                 "example_0": {"onOff": {"running": 0, "stopped": 1, },
                               "workMode": {"auto": 0, "cooling": 1, "heating": 2, "fan": 3, "dehumidify": 4, },
                               "fanSpeed": {}, }}
-                              
+
             # 检查设备是否存在
             try:
                 device = (
@@ -709,12 +713,12 @@ def send_command(request):
                 )
                 if not device:
                     return JsonResponse({"error": "Device not found"}, status=404)
-                    
+
                 topic = device.uuid.publish_topic
             except Exception as e:
                 logger.error(f"查询设备失败: {str(e)}")
                 return JsonResponse({"error": "Failed to query device"}, status=500)
-                
+
             # 构造控制命令
             payload = {
                 "sn": 12,
@@ -731,7 +735,7 @@ def send_command(request):
             else:
                 payload["body"][f"{issue_property}"] = device_status_convert_dict[f"{uuid}"][f"{issue_property}"][
                     f"{value}"]
-                    
+
             topic_publish = (
                 Device.objects
                 .filter(uuid__uuid=uuid, device_id=device_id)
@@ -743,11 +747,6 @@ def send_command(request):
             logger.info(f"下发命令: {payload}, topic: {topic}")
             payload_json = json.dumps(payload)
             mqtt_client.publish(topic, payload_json)
-            
-            time.sleep(7)
-            query_device_payload = {"sn": 11, "cmd": "status_read", "uuid": f"{uuid}",
-                                 "body": {"cmd": "addrs", "addrs": [f"{device_id}", ]}}
-            mqtt_client.publish(topic, json.dumps(query_device_payload))
             return JsonResponse({'status': 'Command has been issued to the device.'})
 
         except Exception as e:
@@ -760,7 +759,7 @@ def query_all_device_status(request):
     try:
         # 获取所有不重复的UUID
         uuids = Topic.objects.values_list('uuid', flat=True).distinct()
-        
+
         for uuid_current in uuids:
             # 构造消息
             message = {
@@ -772,24 +771,24 @@ def query_all_device_status(request):
                     "addrs": ["1-3-1-0"]  # 固定地址格式
                 }
             }
-            
+
             # 获取发布主题
             try:
                 topic = Topic.objects.get(uuid=uuid_current)
                 publish_topic = topic.publish_topic
-                
+
                 # 发布消息
                 logger.info(f"正在查询设备状态: UUID={uuid_current}")
                 mqtt_client.publish(publish_topic, message)
-                
+
             except Topic.DoesNotExist:
                 logger.error(f"找不到UUID对应的Topic: {uuid_current}")
             except Exception as e:
                 logger.error(f"发送状态查询命令失败: {str(e)}")
                 continue
-        
+
         return Response({"message": "状态查询命令已发送"})
-        
+
     except Exception as e:
         logger.error(f"查询设备状态失败: {str(e)}")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -803,7 +802,7 @@ def export_devices_excel(request):
         # 创建响应
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
         response['Content-Disposition'] = 'attachment; filename="devices.csv"'
-        
+
         # 获取所有设备信息
         devices = Device.objects.select_related(
             'uuid',
@@ -811,11 +810,11 @@ def export_devices_excel(request):
             'company',
             'department'
         ).all()
-        
+
         # 写入表头
         headers = ['网关ID', '内机ID', '内机名称', '建筑', '楼栋', '公司', '部门']
         response.write(','.join(headers) + '\n')
-        
+
         # 写入数据
         for device in devices:
             row = [
@@ -830,9 +829,9 @@ def export_devices_excel(request):
             # 处理可能包含逗号的字段，用双引号包围
             row = ['"' + str(field).replace('"', '""') + '"' for field in row]
             response.write(','.join(row) + '\n')
-        
+
         return response
-        
+
     except Exception as e:
         logger.error(f"导出CSV失败: {str(e)}")
         return JsonResponse({'error': '导出失败', 'detail': str(e)}, status=500)
