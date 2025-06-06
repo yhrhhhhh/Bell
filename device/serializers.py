@@ -20,6 +20,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     floor_name = serializers.CharField(source='floor.name', read_only=True)
     uuid_info = serializers.SerializerMethodField()
     uuid_value = serializers.CharField(source='uuid.uuid', read_only=True)
+    gateway_online = serializers.BooleanField(source='uuid.online_status', read_only=True)
     
     class Meta:
         model = Device
@@ -32,7 +33,8 @@ class DeviceSerializer(serializers.ModelSerializer):
                 'topic': {
                     'subscribe': obj.uuid.subscribe_topic,
                     'publish': obj.uuid.publish_topic
-                }
+                },
+                'online_status': obj.uuid.online_status
             }
         return None
         
@@ -46,7 +48,7 @@ class DeviceCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Device
-        fields = ['name', 'device_id', 'uuid', 'company', 'department', 'floor', 'current_temp', 'set_temp', 'status', 'mode', 'fan_speed', 'room_id']
+        fields = ['name', 'device_id', 'uuid', 'company', 'department', 'floor', 'current_temp', 'set_temp', 'status', 'mode', 'fan_speed', 'room_id', 'online_status']
 
     def validate(self, data):
         # 验证必填字段

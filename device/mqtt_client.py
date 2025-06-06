@@ -91,6 +91,9 @@ class MQTTClient:
                     
                 try:
                     uuid_object = Topic.objects.get(uuid=uuid_current)
+                    # 更新网关在线状态
+                    uuid_object.online_status = True
+                    uuid_object.save()
                 except Topic.DoesNotExist:
                     logger.error(f"UUID不存在: {uuid_current}")
                     return
@@ -111,8 +114,16 @@ class MQTTClient:
                         device, created = Device.objects.get_or_create(
                             uuid=uuid_object,
                             device_id=device_id,
-                            defaults={"name": "未命名设备", "room_id": 0}
+                            defaults={
+                                "name": "未命名设备", 
+                                "room_id": 0,
+                                "online_status": True
+                            }
                         )
+                        if not created:
+                            device.online_status = True
+                            device.save()
+                            
                         if created:
                             logger.info(f"新设备: device_id={device_id}")
                             
@@ -125,7 +136,37 @@ class MQTTClient:
             elif cmd == "online":
                 uuid_current = message.get("uuid")
                 if uuid_current:
-                    logger.info(f"设备上线: UUID={uuid_current}")
+                    try:
+                        # 更新网关在线状态
+                        uuid_object = Topic.objects.get(uuid=uuid_current)
+                        uuid_object.online_status = True
+                        uuid_object.save()
+                        
+                        # 更新该网关下所有设备的在线状态
+                        Device.objects.filter(uuid=uuid_object).update(online_status=True)
+                        
+                        logger.info(f"设备上线: UUID={uuid_current}")
+                    except Topic.DoesNotExist:
+                        logger.error(f"UUID不存在: {uuid_current}")
+                    except Exception as e:
+                        logger.error(f"更新在线状态错误: {str(e)}")
+            elif cmd == "offline":
+                uuid_current = message.get("uuid")
+                if uuid_current:
+                    try:
+                        # 更新网关离线状态
+                        uuid_object = Topic.objects.get(uuid=uuid_current)
+                        uuid_object.online_status = False
+                        uuid_object.save()
+                        
+                        # 更新该网关下所有设备的离线状态
+                        Device.objects.filter(uuid=uuid_object).update(online_status=False)
+                        
+                        logger.info(f"设备离线: UUID={uuid_current}")
+                    except Topic.DoesNotExist:
+                        logger.error(f"UUID不存在: {uuid_current}")
+                    except Exception as e:
+                        logger.error(f"更新离线状态错误: {str(e)}")
 
         except json.JSONDecodeError:
             logger.error("JSON解析错误")
@@ -163,7 +204,8 @@ class MQTTClient:
                             status=on_off,
                             mode=work_mode,
                             fan_speed=fan_speed,
-                            set_temp=set_tem
+                            set_temp=set_tem,
+                            online_status=True
                         )
         except Exception as e:
             logger.error(f"处理消息错误: {e}")

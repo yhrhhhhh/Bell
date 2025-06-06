@@ -67,6 +67,7 @@ class Topic(models.Model):
     subscribe_topic = models.CharField(max_length=255, verbose_name='订阅Topic路径', db_index=True)
     publish_topic = models.CharField(max_length=255, verbose_name='发布Topic路径', db_index=True)
     description = models.TextField(blank=True, null=True, verbose_name='描述')
+    online_status = models.BooleanField(default=False, verbose_name='网关在线状态')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 
@@ -130,6 +131,7 @@ class Device(models.Model):
     current_temp = models.FloatField(default=25.0, verbose_name="当前温度")
     set_temp = models.FloatField(default=25.0, verbose_name="设定温度")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='stopped', verbose_name="运行状态")
+    online_status = models.BooleanField(default=False, verbose_name="设备在线状态")
     mode = models.CharField(max_length=20, choices=MODE_CHOICES, default='cooling', verbose_name="运行模式")
     fan_speed = models.IntegerField(choices=FAN_SPEED_CHOICES, default=FAN_SPEED_AUTO, verbose_name="风速")
     running_time = models.FloatField(default=0.0, verbose_name="运行时间(小时)")

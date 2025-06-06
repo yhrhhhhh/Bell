@@ -3,15 +3,15 @@ from .models import Device, Topic, Company, Department, Building, Floor, DeviceS
 
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
-    list_display = ('name', 'device_id', 'uuid', 'status', 'current_temp', 'set_temp', 'mode', 'fan_speed')
-    list_filter = ('status', 'mode', 'fan_speed')
+    list_display = ('name', 'device_id', 'uuid', 'status', 'online_status', 'current_temp', 'set_temp', 'mode', 'fan_speed')
+    list_filter = ('status', 'mode', 'fan_speed', 'online_status')
     search_fields = ('name', 'device_id', 'uuid')
 
 @admin.register(Topic)
 class TopicAdmin(admin.ModelAdmin):
-    list_display = ['uuid', 'subscribe_topic', 'publish_topic', 'description', 'created_at', 'updated_at']
+    list_display = ['uuid', 'subscribe_topic', 'publish_topic', 'online_status', 'description', 'created_at', 'updated_at']
     search_fields = ['uuid', 'subscribe_topic', 'publish_topic', 'description']
-    list_filter = ['created_at', 'updated_at']
+    list_filter = ['created_at', 'updated_at', 'online_status']
 
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
