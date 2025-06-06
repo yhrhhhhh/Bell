@@ -21,6 +21,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     uuid_info = serializers.SerializerMethodField()
     uuid_value = serializers.CharField(source='uuid.uuid', read_only=True)
     gateway_online = serializers.BooleanField(source='uuid.online_status', read_only=True)
+    actual_online_status = serializers.SerializerMethodField()
     
     class Meta:
         model = Device
@@ -37,6 +38,12 @@ class DeviceSerializer(serializers.ModelSerializer):
                 'online_status': obj.uuid.online_status
             }
         return None
+
+    def get_actual_online_status(self, obj):
+        """计算设备的实际在线状态，需要同时考虑设备自身和网关的在线状态"""
+        if not obj.uuid:
+            return False
+        return obj.online_status and obj.uuid.online_status
         
 class DeviceStatusSerializer(serializers.ModelSerializer):
     class Meta:
