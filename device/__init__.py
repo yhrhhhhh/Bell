@@ -1,0 +1,1 @@
+default_app_config = 'device.apps.DeviceConfig'  # 确保Django使用自定义AppConfig

@@ -16,3 +16,9 @@ class DeviceConfig(AppConfig):
             if 'runserver' in sys.argv:
                 from .mqtt_client import mqtt_client
                 mqtt_client.start()
+
+
+            """Django启动时自动加载定时任务"""
+            if not hasattr(self, '_already_loaded'):
+                from .cron import scheduler  # 触发cron.py的初始化
+                self._already_loaded = True

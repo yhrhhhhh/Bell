@@ -30,6 +30,7 @@ ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '192.168.20.109']
 # Application definition
 
 INSTALLED_APPS = [
+    "django_apscheduler",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -44,6 +45,7 @@ INSTALLED_APPS = [
     'device.apps.DeviceConfig',
     # 'control.apps.ControlConfig'
 ]
+
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -151,7 +153,6 @@ JWT_AUTH = {
     'JWT_ALLOW_REFRESH': True,  # 允许刷新Token
     'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),  # 刷新Token的有效期为7天
 }
-
 
 # MQTT配置
 MQTT_BROKER = '42.236.68.223'  # 你的MQTT broker地址 iotserver.zjdcny.com.cn

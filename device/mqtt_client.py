@@ -1,8 +1,9 @@
 import json
+import logging
 
 import paho.mqtt.client as mqtt
 from django.conf import settings
-import logging
+from django.utils import timezone
 
 from .models import Topic, Device
 
@@ -55,9 +56,11 @@ class MQTTClient:
                 # 状态改变数据上报
                 self.process_message(message, uuid_object)
                 logger.info(f"状态改变数据上报 `{message}` from topic：`{topic}` ")
-            elif cmd == "control_write":
-                # 下发成功的状态，暂时不管
-                pass
+            elif cmd == "online":
+                # 在线状态消息上报，更新时间自动更新
+                # logger.info(f"更新网管状态：{timezone.localtime(timezone.now())}")
+                Topic.objects.filter(uuid=uuid_current).update(online_status=True,
+                                                               updated_at=timezone.localtime(timezone.now()))
 
         except Exception as e:
             logger.error(f"MQTT process message error: {e}")
@@ -67,6 +70,7 @@ class MQTTClient:
         """上传消息解析,更新设备的数据状态"""
         try:
             device_status_info_list = data.get("body", {}).get("inUnitMessages")
+            online_status_dict = {"LOST": False, "": True}  # 为空目前
             if isinstance(device_status_info_list, list) and device_status_info_list:
                 for device_info in device_status_info_list:
                     device_id = device_info.get("a")
@@ -75,13 +79,17 @@ class MQTTClient:
                     mode = device_info.get("w")
                     fan_speed = device_info.get("fs")
                     current_tem = device_info.get("rt")
+                    online_status_str = device_info.get("acs")
+                    online_status_code = online_status_dict.get(online_status_str)
                     MQTTClient.update_data(uuid_object=uuid_object, device_id=device_id, current_tem=current_tem,
-                                           status=status, mode=mode, fan_speed=fan_speed, set_temp=set_temp)
+                                           status=status, mode=mode, fan_speed=fan_speed, set_temp=set_temp,
+                                           online_status=online_status_code)
         except Exception as e:
             logger.error(f"process_message function error: {e}")
 
     @staticmethod
-    def update_data(uuid_object, device_id, current_tem=None, status=None, mode=None, fan_speed=None, set_temp=None):
+    def update_data(uuid_object, device_id, current_tem=None, status=None, mode=None, fan_speed=None, set_temp=None,
+                    online_status=None):
         try:
             status_convert_dict = {"fa000001400001240240614000100308": {"status": {"1": "running", "0": "stopped", },
                                                                         "mode": {"1": "cooling", "2": "heating",
@@ -103,7 +111,10 @@ class MQTTClient:
                 'status': status,
                 'mode': mode,
                 'fan_speed': fan_speed,
-                'set_temp': set_temp
+                'set_temp': set_temp,
+                'online_status': online_status,
+                'last_updated': timezone.localtime(timezone.now())
+
             }.items() if v is not None}
             Device.objects.filter(uuid=uuid_object, device_id=device_id).update(**update_fields)
         except Exception as e:
