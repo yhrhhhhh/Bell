@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 import datetime
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +21,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-4gs)-erv$xf6m9l*c@ltkfq9i00qu1az(!^k6ifprn@i_+crw#'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-4gs)-erv$xf6m9l*c@ltkfq9i00qu1az(!^k6ifprn@i_+crw#')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '192.168.20.109']
+# 合并默认的ALLOWED_HOSTS和环境变量中的值
+DEFAULT_ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '192.168.20.109',"47.99.51.76"]
+ENV_ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+ALLOWED_HOSTS = DEFAULT_ALLOWED_HOSTS + [host.strip() for host in ENV_ALLOWED_HOSTS if host.strip()]
 
 # Application definition
 
@@ -58,7 +62,10 @@ MIDDLEWARE = [
     'user.middleware.JwtAuthenticationMiddleware'
 ]
 
-CORS_ORIGIN_ALLOW_ALL = True
+CORS_ORIGIN_ALLOW_ALL = os.getenv('CORS_ORIGIN_ALLOW_ALL', 'True') == 'True'
+
+if not CORS_ORIGIN_ALLOW_ALL:
+    CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -97,11 +104,11 @@ WSGI_APPLICATION = 'bell.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'bell',
-        'USER': 'root',
-        'PASSWORD': 'dcny123',
-        'HOST': 'localhost',
-        'PORT': '3306'
+        'NAME': os.getenv('DB_NAME', 'bell'),
+        'USER': os.getenv('DB_USER', 'root'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'dcny123'),
+        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'PORT': os.getenv('DB_PORT', '3306')
     }
 }
 
@@ -137,15 +144,16 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = os.getenv('STATIC_URL', 'static/')
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = os.getenv('MEDIA_URL', 'media/')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-MEDIA_ROOT = BASE_DIR / 'media'
-MEDIA_URL = 'media/'
 
 # JWT Configuration
 JWT_AUTH = {
@@ -155,10 +163,10 @@ JWT_AUTH = {
 }
 
 # MQTT配置
-MQTT_BROKER = '42.236.68.223'  # 你的MQTT broker地址 iotserver.zjdcny.com.cn
-MQTT_PORT = 6183
-MQTT_USERNAME = 'xinxiangliantong'
-MQTT_PASSWORD = 'xxlt250524'
+MQTT_BROKER = os.getenv('MQTT_BROKER', '42.236.68.223')
+MQTT_PORT = int(os.getenv('MQTT_PORT', '6183'))
+MQTT_USERNAME = os.getenv('MQTT_USERNAME', 'xinxiangliantong')
+MQTT_PASSWORD = os.getenv('MQTT_PASSWORD', 'xxlt250524')
 
 # 日志设置，可调等级
 LOGGING = {

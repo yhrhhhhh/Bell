@@ -1,48 +1,80 @@
 version: '3.8'
 
+name: bell-project
+
 services:
   web:
-    build: .
+    build: 
+      context: ..
+      dockerfile: deploy/Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - DJANGO_SETTINGS_MODULE=bell.settings
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/bell
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      - db
-      - redis
+      - DEBUG=False
+      - ALLOWED_HOSTS=47.99.51.76
+      - SECRET_KEY=your-production-secret-key
+      - DB_NAME=bell
+      - DB_USER=root
+      - DB_PASSWORD=your-db-password
+      - DB_HOST=db
+      - DB_PORT=3306
+      - MQTT_BROKER=42.236.68.223
+      - MQTT_PORT=6183
+      - MQTT_USERNAME=xinxiangliantong
+      - MQTT_PASSWORD=xxlt250524
     volumes:
       - static_volume:/app/backend/static
       - media_volume:/app/backend/media
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/admin/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   db:
-    image: postgres:13
+    image: mysql:8.0
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     environment:
-      - POSTGRES_DB=bell
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-
-  redis:
-    image: redis:6
-    volumes:
-      - redis_data:/data
+      - MYSQL_DATABASE=bell
+      - MYSQL_ROOT_PASSWORD=your-db-password
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   nginx:
     image: nginx:1.21
     ports:
       - "80:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
-      - static_volume:/app/static
-      - media_volume:/app/media
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_volume:/app/static:ro
+      - media_volume:/app/media:ro
+      - ../Django_Project/bell_admin/dist:/app/frontend:ro
     depends_on:
-      - web
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
-  postgres_data:
-  redis_data:
+  mysql_data:
+    name: bell_mysql_data
   static_volume:
-  media_volume: 
+    name: bell_static_volume
+  media_volume:
+    name: bell_media_volume 
