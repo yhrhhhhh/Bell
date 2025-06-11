@@ -5,8 +5,8 @@ name: bell-project
 services:
   web:
     build: 
-      context: ..
-      dockerfile: deploy/Dockerfile
+      context: ../../
+      dockerfile: Bell/deploy/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -60,7 +60,7 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - static_volume:/app/static:ro
       - media_volume:/app/media:ro
-      - ../Django_Project/bell_admin/dist:/app/frontend:ro
+      - ../../bell_admin/dist:/app/frontend:ro
     depends_on:
       web:
         condition: service_healthy
