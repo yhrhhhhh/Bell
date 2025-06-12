@@ -5,13 +5,13 @@ FROM node:16 as frontend-builder
 WORKDIR /app/frontend
 
 # 复制前端项目文件
-COPY ../bell_admin/package*.json ./
+COPY bell_admin/package*.json ./
 
 # 安装依赖
 RUN npm install
 
 # 复制源代码
-COPY ../bell_admin/ ./
+COPY bell_admin/ ./
 
 # 构建前端
 RUN npm run build:prod
