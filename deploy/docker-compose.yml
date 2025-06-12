@@ -5,8 +5,8 @@ name: bell-project
 services:
   web:
     build: 
-      context: ../../
-      dockerfile: Bell/deploy/Dockerfile
+      context: ..
+      dockerfile: deploy/Dockerfile
     ports:
       - "8000:8000"
     env_file:
