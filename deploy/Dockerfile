@@ -5,13 +5,13 @@ FROM node:16 as frontend-builder
 WORKDIR /app/frontend
 
 # 复制前端项目文件
-COPY ../bell_admin/package*.json ./
+COPY ../../bell_admin/package*.json ./
 
 # 安装依赖
 RUN npm install
 
 # 复制源代码
-COPY ../bell_admin/ ./
+COPY ../../bell_admin/ ./
 
 # 构建前端
 RUN npm run build:prod
@@ -38,12 +38,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 创建必要的目录
 RUN mkdir -p /app/backend/media /app/backend/static
 
-# 复制后端项目文件
-WORKDIR /app/backend
-COPY . /app/backend/
-
-# 安装Python依赖
+# 首先复制 requirements.txt
+COPY ../requirements.txt /app/backend/
 RUN pip install --no-cache-dir -r requirements.txt
+
+# 然后复制其他后端文件
+COPY ../manage.py /app/backend/
+COPY ../bell /app/backend/bell/
+COPY ../device /app/backend/device/
+COPY ../menu /app/backend/menu/
+COPY ../user /app/backend/user/
 
 # 从前端构建阶段复制构建文件
 COPY --from=frontend-builder /app/frontend/dist /app/backend/static/dist
