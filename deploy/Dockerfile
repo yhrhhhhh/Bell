@@ -17,7 +17,7 @@ COPY bell_admin/ ./
 RUN npm run build:prod
 
 # 第二阶段：Python后端
-FROM python:3.8-slim
+FROM python:3.13
 
 # 设置工作目录
 WORKDIR /app/backend
