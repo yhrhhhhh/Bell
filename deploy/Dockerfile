@@ -35,15 +35,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制后端项目文件
-COPY ../requirements.txt /app/backend/
-COPY ../manage.py /app/backend/
+# 创建必要的目录
+RUN mkdir -p /app/backend/media /app/backend/static
+
+# 复制必要的后端文件
+COPY ../requirements.txt /app/backend/requirements.txt
+COPY ../manage.py /app/backend/manage.py
 COPY ../bell /app/backend/bell/
 COPY ../device /app/backend/device/
 COPY ../menu /app/backend/menu/
 COPY ../user /app/backend/user/
 COPY ../scripts /app/backend/scripts/
-COPY ../media /app/backend/media/
 
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
