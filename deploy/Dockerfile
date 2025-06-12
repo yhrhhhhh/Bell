@@ -39,15 +39,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN mkdir -p /app/backend/media /app/backend/static
 
 # 首先复制 requirements.txt
-COPY requirements.txt /app/backend/
+COPY Bell/requirements.txt /app/backend/
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 然后复制其他后端文件
-COPY manage.py /app/backend/
-COPY bell /app/backend/bell/
-COPY device /app/backend/device/
-COPY menu /app/backend/menu/
-COPY user /app/backend/user/
+COPY Bell/manage.py /app/backend/
+COPY Bell/bell /app/backend/bell/
+COPY Bell/device /app/backend/device/
+COPY Bell/menu /app/backend/menu/
+COPY Bell/user /app/backend/user/
 
 # 从前端构建阶段复制构建文件
 COPY --from=frontend-builder /app/frontend/dist /app/backend/static/dist
