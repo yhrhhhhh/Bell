@@ -45,7 +45,6 @@ COPY ../bell /app/backend/bell/
 COPY ../device /app/backend/device/
 COPY ../menu /app/backend/menu/
 COPY ../user /app/backend/user/
-COPY ../scripts /app/backend/scripts/
 
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
