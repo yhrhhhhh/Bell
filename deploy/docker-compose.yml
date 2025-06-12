@@ -1,4 +1,4 @@
-version: '3.8'
+version: '3'
 
 name: bell-project
 
@@ -9,19 +9,8 @@ services:
       dockerfile: Bell/deploy/Dockerfile
     ports:
       - "8000:8000"
-    environment:
-      - DEBUG=False
-      - ALLOWED_HOSTS=47.99.51.76
-      - SECRET_KEY=your-production-secret-key
-      - DB_NAME=bell
-      - DB_USER=root
-      - DB_PASSWORD=your-db-password
-      - DB_HOST=db
-      - DB_PORT=3306
-      - MQTT_BROKER=42.236.68.223
-      - MQTT_PORT=6183
-      - MQTT_USERNAME=xinxiangliantong
-      - MQTT_PASSWORD=xxlt250524
+    env_file:
+      - ../.env
     volumes:
       - static_volume:/app/backend/static
       - media_volume:/app/backend/media
@@ -40,13 +29,12 @@ services:
     image: mysql:8.0
     volumes:
       - mysql_data:/var/lib/mysql
-    environment:
-      - MYSQL_DATABASE=bell
-      - MYSQL_ROOT_PASSWORD=your-db-password
+    env_file:
+      - ../.env
     command: --default-authentication-plugin=mysql_native_password
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
