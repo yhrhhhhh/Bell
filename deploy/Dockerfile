@@ -25,7 +25,10 @@ WORKDIR /app/backend
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    PIP_DEFAULT_TIMEOUT=100 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
 
 # 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,9 +41,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 创建必要的目录
 RUN mkdir -p /app/backend/media /app/backend/static
 
+# 配置pip
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    && pip config set global.timeout 100 \
+    && pip install --upgrade pip setuptools wheel
+
 # 首先复制 requirements.txt
 COPY Bell/requirements.txt /app/backend/
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt --retries 3
 
 # 然后复制其他后端文件
 COPY Bell/manage.py /app/backend/
@@ -63,4 +71,4 @@ gunicorn bell.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120' > 
     && chmod +x /app/backend/start.sh
 
 # 启动命令
-CMD ["/app/backend/start.sh"] 
+CMD ["/app/backend/start.sh"]
