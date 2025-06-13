@@ -1,4 +1,3 @@
-version: '3'
 
 name: bell-project
 
@@ -32,10 +31,10 @@ services:
     env_file:
       - ../.env
     environment:
-      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
-      - MYSQL_DATABASE=${DB_NAME}
-      - MYSQL_USER=${DB_USER}
-      - MYSQL_PASSWORD=${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     command: --default-authentication-plugin=mysql_native_password
     restart: unless-stopped
     healthcheck:
